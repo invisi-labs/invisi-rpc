@@ -3,7 +3,6 @@ package rpc
 
 import (
 	"context"
-	"crypto/subtle"
 	"errors"
 	"net/http"
 	"sync"
@@ -28,16 +27,15 @@ type Backend interface {
 	IsSpent(context.Context, common.Hash) (bool, error)
 }
 type API struct {
-	Store          Backend
-	Deployment     model.Deployment
-	version        VersionInfo
-	DetectionBits  int
-	detectionToken string
-	detectionSlots chan struct{}
-	mu             sync.Mutex
-	prepared       map[string]*cryptography.PreparedClue
+	Store            Backend
+	Deployment       model.Deployment
+	version          VersionInfo
+	DetectionBits    int
+	detectionEnabled bool
+	detectionSlots   chan struct{}
+	mu               sync.Mutex
+	prepared         map[string]*cryptography.PreparedClue
 }
-type authKey struct{}
 type Range struct {
 	FromBlock uint64      `json:"fromBlock"`
 	ToBlock   uint64      `json:"toBlock"`
@@ -56,7 +54,7 @@ type Status struct {
 	CheckedBits      int              `json:"checkedBits"`
 }
 
-func New(store Backend, d model.Deployment, bits int, token string, protocolVersion string) (*API, error) {
+func New(store Backend, d model.Deployment, bits int, enabled bool, protocolVersion string) (*API, error) {
 	if err := d.ValidateMetadata(); err != nil {
 		return nil, err
 	}
@@ -66,11 +64,11 @@ func New(store Backend, d model.Deployment, bits int, token string, protocolVers
 	if bits < 1 || bits > 24 {
 		return nil, errors.New("detection bits must be 1..24")
 	}
-	return &API{Store: store, Deployment: d, DetectionBits: bits, version: VersionInfo{APIVersion: protocol.APIVersion, ProtocolVersion: protocolVersion}, detectionToken: token, detectionSlots: make(chan struct{}, 2), prepared: make(map[string]*cryptography.PreparedClue)}, nil
+	return &API{Store: store, Deployment: d, DetectionBits: bits, version: VersionInfo{APIVersion: protocol.APIVersion, ProtocolVersion: protocolVersion}, detectionEnabled: enabled, detectionSlots: make(chan struct{}, 2), prepared: make(map[string]*cryptography.PreparedClue)}, nil
 }
 func (a *API) GetStatus(ctx context.Context) (Status, error) {
 	h, e := a.Store.Checkpoint(ctx)
-	return Status{VersionInfo: a.version, Deployment: a.Deployment, IndexedHead: h, DetectionEnabled: a.detectionToken != "", CheckedBits: a.DetectionBits}, e
+	return Status{VersionInfo: a.version, Deployment: a.Deployment, IndexedHead: h, DetectionEnabled: a.detectionEnabled, CheckedBits: a.DetectionBits}, e
 }
 
 // GetDeployment is available before indexing has reached its first checkpoint.
@@ -183,17 +181,17 @@ type DetectionResult struct {
 }
 
 func (a *API) DetectOutputs(ctx context.Context, r Range, key hexutil.Bytes) (*DetectionResult, error) {
-	if ok, _ := ctx.Value(authKey{}).(bool); !ok || a.detectionToken == "" {
-		return nil, errors.New("delegated detection is disabled or unauthorized")
-	}
-	if err := cryptography.ValidateDetectionKey(key); err != nil {
-		return nil, err
+	if !a.detectionEnabled {
+		return nil, errors.New("delegated detection is disabled")
 	}
 	select {
 	case a.detectionSlots <- struct{}{}:
 		defer func() { <-a.detectionSlots }()
 	default:
-		return nil, errors.New("detection capacity reached; retry later")
+		return nil, capacityError{}
+	}
+	if err := cryptography.ValidateDetectionKey(key); err != nil {
+		return nil, err
 	}
 	updates, e := a.GetUpdates(ctx, r)
 	if e != nil {
@@ -250,10 +248,6 @@ func HTTPHandler(a *API) (http.Handler, error) {
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 		defer cancel()
-		token := r.Header.Get("Authorization")
-		expected := "Bearer " + a.detectionToken
-		authorized := a.detectionToken != "" && subtle.ConstantTimeCompare([]byte(token), []byte(expected)) == 1
-		ctx = context.WithValue(ctx, authKey{}, authorized)
 		s.ServeHTTP(w, r.WithContext(ctx))
 	}), nil
 }

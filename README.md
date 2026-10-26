@@ -67,7 +67,7 @@ invisi-protocol-rpc/
 
 `init` refuses to overwrite an existing configuration. `run` resumes each checkpoint, reconciles reorganizations, and waits normally when caught up. A missing required block, log range or historical state produces a chain-specific error identifying the height; an upstream behind its saved checkpoint is rejected at startup. All chains already configured at startup must pass validation before the listener opens. Chains added while running are validated independently; an unavailable new upstream does not stop existing chains.
 
-Settings live in `config.json`; see [config.example.json](config.example.json). Each entry under `chains` contains its own `chainRpc`, deployment, database and indexing settings. `chain add --confirmations` and `--snapshot-interval` set values for that chain; edit individual entries for other policies. Chain settings are reloaded while running; changing `listen` requires a restart. `confirmations: 0` is for local development. Choose appropriate deployed-chain depths; confirmation depth is not a consensus finality guarantee. `detectionBits` defaults to 8 and `snapshotInterval` to `6h`; use `0s` to disable exports. `listen` defaults to `127.0.0.1:8080`.
+Settings live in `config.json`; see [config.example.json](config.example.json). Each entry under `chains` contains its own `chainRpc`, deployment, database and indexing settings. `chain add --confirmations` and `--snapshot-interval` set values for that chain; edit individual entries for other policies. Chain settings are reloaded while running; changing `listen` or `maxConcurrentRequests` requires a restart. `confirmations: 0` is for local development. Choose appropriate deployed-chain depths; confirmation depth is not a consensus finality guarantee. `detectionBits` defaults to 8 and `snapshotInterval` to `6h`; use `0s` to disable exports. `listen` defaults to `127.0.0.1:8080`.
 
 ## Environment variables
 
@@ -91,6 +91,7 @@ export INVISI_RPC_LISTEN=127.0.0.1:8080
 | `INVISI_RPC_DATABASE` | `chain add --database`; default `sqlite` |
 | `INVISI_RPC_DATABASE_URL`, `DATABASE_URL` | `chain add --database-url`; PostgreSQL URL |
 | `INVISI_RPC_LISTEN` | `init/run --listen` |
+| `INVISI_RPC_DETECTION_ENABLED` | `chain add --detection-enabled`; default `true` |
 | `INVISI_RPC_CONFIRMATIONS` | `chain add --confirmations` |
 | `INVISI_RPC_SNAPSHOT_INTERVAL` | `chain add --snapshot-interval` |
 | `INVISI_RPC_SNAPSHOT` | `chain add --snapshot`; local snapshot file |
@@ -99,7 +100,7 @@ export INVISI_RPC_LISTEN=127.0.0.1:8080
 | `INVISI_RPC_CHAIN` | `snapshot export --chain` |
 | `INVISI_RPC_SNAPSHOT_OUTPUT` | `snapshot export --output` |
 
-`FMD_API_TOKEN` enables authenticated detection. Environment variables are read from the process; `.env` files are not loaded automatically.
+Environment variables are read from the process; `.env` files are not loaded automatically.
 
 ## Database selection and chain isolation
 
@@ -167,7 +168,7 @@ POST JSON-RPC 2.0 to `/v1/chains/<chainId>` using positional parameter arrays. `
 | `invisi_isSpent` | `[nullifier]` | Consumption through the indexed head |
 | `invisi_getUpdates` | `[range]` | Public outputs and Credit transitions |
 | `invisi_getCreditTransitions` | `[range]` | Credit creation, draw, cancellation and top-up |
-| `invisi_detectOutputs` | `[range, detectionKey]` | Authenticated FMD candidates and Credit transitions |
+| `invisi_detectOutputs` | `[range, detectionKey]` | FMD candidates and Credit transitions |
 
 A range is `{ "fromBlock": 100, "toBlock": 110, "blockHash": "0x…" }`. The hash must match indexed `toBlock`, obtained through `getBlock` or `getStatus`. Queries accept at most 100 blocks and 10,000 results; overflow returns an error. Use smaller ranges or full blocks. Reorganizations invalidate old anchors; recheck when combining responses.
 
@@ -181,13 +182,23 @@ Live indexing stores contract-recorded **batch-final roots**, never per-leaf int
 
 ## Optional delegated FMD
 
-Set `FMD_API_TOKEN` to enable `invisi_detectOutputs`; otherwise it is disabled. Use HTTPS with `Authorization: Bearer <token>`. Supply only a detection key, never a viewing or spending private key. Detection keys are not persisted and request bodies are not logged.
+`chain add` enables FMD by default. Set `--detection-enabled=false` when adding a chain, or set its `detectionEnabled` configuration to `false`, to disable `invisi_detectOutputs`. A configuration entry without this field disables detection. This switch is independent of API authentication. Supply only a detection key, never a viewing or spending private key. Detection keys are not persisted and request bodies are not logged.
 
 Senders generate 24-bit, 68-byte clues. The service checks a configurable 1–24-bit prefix (`detectionBits: 8` by default). Public preparation is cached; detection remains key-specific. Two scans may run concurrently, with at most 1,000 deliveries per request, independently of indexing.
 
 Malformed/unsupported clues are returned with `fallback: true` for local inspection. Credit transitions are returned separately because remainder recovery may need a parent/shared key even when the child envelope cannot be decrypted. Clients decrypt and verify candidates. A valid but deliberately unrelated clue cannot be classified as malformed; complete recovery retrieves events without FMD filtering.
 
-Detection is request-driven. Persistent per-user delegation queues, WebSocket delivery and an SDK RPC adapter are not implemented. Applications manage cursors, retries and reorg handling. Use HTTPS and a gateway for tenant quotas and network rate limits.
+Detection is request-driven. Persistent per-user delegation queues and WebSocket delivery are not implemented. Applications manage cursors, retries and reorg handling.
+
+## HTTP gateway and overload handling
+
+The service accepts public requests. Optional API authentication and per-IP or per-issued-key rate limits belong to the HTTP gateway. An API key authorizes service access; it is unrelated to a token contract or a wallet detection key. See [the Nginx example](deploy/nginx.conf.example): public access is enabled, and a commented guard enables private access. Replace the placeholder key before enabling that guard. Serve production traffic over HTTPS and restrict direct access to the backend when gateway authentication is required. Behind another proxy, configure trusted proxy addresses before using forwarded client IPs.
+
+The example limits HTTP requests by IP or recognized key. It does not meter individual JSON-RPC batch calls or their computational cost. Its rate and connection values are illustrative deployment settings, not benchmark results.
+
+The backend independently limits requests to 1 MiB, batches to 20 calls and batch responses to 16 MiB. Query ranges and result limits still apply. `maxConcurrentRequests` defaults to 64 (allowed range 1–4096) across all chains on the listener. Exhausting this budget returns HTTP 429 with `Retry-After: 1`. Each chain also allows two concurrent FMD scans; exhausting that budget returns JSON-RPC error `-32005` with `data.retryAfterSeconds: 1`, including within an HTTP 200 batch response.
+
+Clients should use bounded exponential backoff with jitter, respecting retry guidance. Authentication failures and invalid requests require correction rather than automatic retries.
 
 ## Development
 

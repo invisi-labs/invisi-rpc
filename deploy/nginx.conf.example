@@ -1,0 +1,59 @@
+# Standalone gateway example: nginx -t -c /absolute/path/nginx.conf
+# Keep the Go listener on 127.0.0.1:8080. Terminate HTTPS at this gateway or its ingress.
+events {}
+http {
+    # Only operator-issued keys receive a named quota bucket. Unknown keys use the IP bucket.
+    map $http_authorization $rpc_client {
+        default "";
+        "~^Bearer REPLACE_WITH_OPERATOR_ISSUED_KEY$" "team-a";
+    }
+    map $rpc_client $rpc_rate_key {
+        "" "ip:$binary_remote_addr";
+        default "key:$rpc_client";
+    }
+    limit_req_zone $rpc_rate_key zone=rpc_rate:10m rate=20r/s;
+    limit_conn_zone $server_name zone=rpc_connections:10m;
+
+    server {
+        listen 127.0.0.1:8088;
+        server_name localhost;
+        client_max_body_size 1m;
+        error_page 429 = @overloaded;
+        error_page 401 = @unauthorized;
+
+        location /v1 {
+            add_header Access-Control-Allow-Origin "*" always;
+            add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
+            add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
+            add_header Access-Control-Expose-Headers "Retry-After" always;
+            if ($request_method = OPTIONS) { return 204; }
+
+            # Public access is the default. Uncomment to require a recognized API key.
+            # if ($rpc_client = "") { return 401; }
+
+            limit_req zone=rpc_rate burst=40 nodelay;
+            limit_req_status 429;
+            limit_conn rpc_connections 256;
+            limit_conn_status 429;
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
+            proxy_set_header Host $host;
+            proxy_read_timeout 35s;
+            proxy_send_timeout 35s;
+            proxy_pass http://127.0.0.1:8080;
+        }
+        location @overloaded {
+            default_type application/json;
+            add_header Access-Control-Allow-Origin "*" always;
+            add_header Access-Control-Expose-Headers "Retry-After" always;
+            add_header Retry-After "1" always;
+            return 429 '{"error":"request rate or connection capacity exceeded"}';
+        }
+        location @unauthorized {
+            default_type application/json;
+            add_header Access-Control-Allow-Origin "*" always;
+            add_header WWW-Authenticate "Bearer" always;
+            return 401 '{"error":"API authorization required"}';
+        }
+    }
+}

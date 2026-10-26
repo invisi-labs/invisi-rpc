@@ -51,9 +51,9 @@ func (f *fakeBackend) Outputs(context.Context, uint64, uint64, int) ([]model.Out
 	return f.outputs, nil
 }
 func (f *fakeBackend) IsSpent(context.Context, common.Hash) (bool, error) { return false, nil }
-func testServer(t *testing.T, f *fakeBackend, token string) http.Handler {
+func testServer(t *testing.T, f *fakeBackend, enabled bool) http.Handler {
 	t.Helper()
-	a, err := New(f, model.Deployment{ChainID: "31337", Protocol: common.HexToAddress("1234"), FromBlock: 8}, 24, token, "1")
+	a, err := New(f, model.Deployment{ChainID: "31337", Protocol: common.HexToAddress("1234"), FromBlock: 8}, 24, enabled, "1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func anchor() (*fakeBackend, Range) {
 }
 func TestHTTPStatusAndUnknownMethod(t *testing.T) {
 	f, _ := anchor()
-	h := testServer(t, f, "")
+	h := testServer(t, f, false)
 	r := call(t, h, "invisi_getStatus", []any{}, "")
 	if r.Error != nil {
 		t.Fatal(r.Error)
@@ -145,7 +145,7 @@ func TestHTTPStrictRangeAnchors(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			f, _ := anchor()
-			r := call(t, testServer(t, f, ""), "invisi_getEvents", []any{tc.r}, "")
+			r := call(t, testServer(t, f, false), "invisi_getEvents", []any{tc.r}, "")
 			if r.Error == nil {
 				t.Fatalf("accepted invalid range: %s", r.Result)
 			}
@@ -156,29 +156,27 @@ func TestHTTPStrictRangeAnchors(t *testing.T) {
 	}
 	f, _ := anchor()
 	f.events = []model.Event{{Name: "Shield"}}
-	r := call(t, testServer(t, f, ""), "invisi_getEvents", []any{good}, "")
+	r := call(t, testServer(t, f, false), "invisi_getEvents", []any{good}, "")
 	if r.Error != nil || f.blockReads != 2 {
 		t.Fatalf("valid range failed: %+v", r)
 	}
 	f, _ = anchor()
 	f.reorgAfter = 1
-	r = call(t, testServer(t, f, ""), "invisi_getEvents", []any{good}, "")
+	r = call(t, testServer(t, f, false), "invisi_getEvents", []any{good}, "")
 	if r.Error == nil || !strings.Contains(r.Error.Message, "reorganized") {
 		t.Fatalf("did not reject reorg during query: %+v", r)
 	}
 }
-func TestHTTPDetectionAuthorization(t *testing.T) {
-	for _, tc := range []struct{ name, serverToken, header string }{{"public disabled", "", ""}, {"missing bearer", "secret", ""}, {"wrong bearer", "secret", "Bearer wrong"}, {"wrong scheme", "secret", "secret"}} {
-		t.Run(tc.name, func(t *testing.T) {
-			f, rng := anchor()
-			r := call(t, testServer(t, f, tc.serverToken), "invisi_detectOutputs", []any{rng, "0x" + strings.Repeat("01", 32)}, tc.header)
-			if r.Error == nil || !strings.Contains(r.Error.Message, "unauthorized") {
-				t.Fatalf("unexpected auth response %+v", r)
-			}
-			if f.outputReads != 0 {
-				t.Fatal("unauthorized detection read outputs")
-			}
-		})
+func TestDisabledDetectionCannotBeEnabledByRequestHeaders(t *testing.T) {
+	for _, header := range []string{"", "Bearer arbitrary", "wrong-scheme"} {
+		f, rng := anchor()
+		result := call(t, testServer(t, f, false), "invisi_detectOutputs", []any{rng, "0x" + strings.Repeat("01", 32)}, header)
+		if result.Error == nil || !strings.Contains(result.Error.Message, "disabled") {
+			t.Fatalf("disabled detection accepted: %+v", result)
+		}
+		if f.outputReads != 0 {
+			t.Fatal("disabled detection read output data")
+		}
 	}
 }
 func TestHTTPDetectionRustVectorAndTransitions(t *testing.T) {
@@ -216,7 +214,7 @@ func TestHTTPDetectionRustVectorAndTransitions(t *testing.T) {
 			f, rng := anchor()
 			f.outputs = []model.Output{{Commitment: common.HexToHash("01"), Clue: clue}, {Commitment: common.HexToHash("02"), Clue: []byte{0xff}}}
 			f.events = []model.Event{{Name: "Shield"}, {Name: "CreditDraw", Data: json.RawMessage(`{"params":{"remainderCommitments":[]}}`)}, {Name: "CreditCancelled"}}
-			r := call(t, testServer(t, f, "secret"), "invisi_detectOutputs", []any{rng, "0x" + tc.key}, "Bearer secret")
+			r := call(t, testServer(t, f, true), "invisi_detectOutputs", []any{rng, "0x" + tc.key}, "")
 			if r.Error != nil {
 				t.Fatal(r.Error)
 			}
@@ -246,7 +244,7 @@ func TestHTTPDetectionRustVectorAndTransitions(t *testing.T) {
 }
 func TestHTTPMethodAndBodyLimits(t *testing.T) {
 	f, _ := anchor()
-	h := testServer(t, f, "")
+	h := testServer(t, f, false)
 	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete} {
 		r := httptest.NewRequest(method, "/", nil)
 		w := httptest.NewRecorder()
@@ -300,7 +298,7 @@ func TestHTTPExactLengthMalformedCluesFallback(t *testing.T) {
 			}
 			f, rng := anchor()
 			f.outputs = []model.Output{{Clue: clue, Commitment: common.HexToHash("123")}}
-			r := call(t, testServer(t, f, "secret"), "invisi_detectOutputs", []any{rng, "0x" + vector.DetectionKey}, "Bearer secret")
+			r := call(t, testServer(t, f, true), "invisi_detectOutputs", []any{rng, "0x" + vector.DetectionKey}, "")
 			if r.Error != nil {
 				t.Fatal(r.Error)
 			}
@@ -318,7 +316,7 @@ func TestHTTPInvalidDetectionKeysFailOnEmptyRange(t *testing.T) {
 	for _, tc := range []struct{ name, key string }{{"zero", strings.Repeat("00", 32)}, {"noncanonical", strings.Repeat("ff", 32)}} {
 		t.Run(tc.name, func(t *testing.T) {
 			f, rng := anchor()
-			r := call(t, testServer(t, f, "secret"), "invisi_detectOutputs", []any{rng, "0x" + tc.key}, "Bearer secret")
+			r := call(t, testServer(t, f, true), "invisi_detectOutputs", []any{rng, "0x" + tc.key}, "")
 			if r.Error == nil {
 				t.Fatalf("invalid 32-byte key accepted on empty range: %s", r.Result)
 			}
@@ -332,7 +330,7 @@ func TestHTTPInvalidDetectionKeysFailOnEmptyRange(t *testing.T) {
 func TestRejectUnsupportedProtocolVersion(t *testing.T) {
 	f, _ := anchor()
 	for _, v := range []string{"", "0", "2", "3"} {
-		if _, err := New(f, model.Deployment{}, 8, "", v); err == nil {
+		if _, err := New(f, model.Deployment{}, 8, false, v); err == nil {
 			t.Fatalf("accepted incompatible Protocol VERSION %q", v)
 		}
 	}
@@ -340,7 +338,7 @@ func TestRejectUnsupportedProtocolVersion(t *testing.T) {
 
 func TestDeploymentWithoutIndexedHead(t *testing.T) {
 	d := model.Deployment{ChainID: "31337", Protocol: common.HexToAddress("1234"), RuntimeCodeHash: common.HexToHash("4567"), FromBlock: 8, Registry: &model.ContractDeployment{Address: common.HexToAddress("5678"), RuntimeCodeHash: common.HexToHash("6789"), FromBlock: 9}}
-	a, err := New(&fakeBackend{}, d, 24, "", "1")
+	a, err := New(&fakeBackend{}, d, 24, false, "1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -361,5 +359,41 @@ func TestDeploymentWithoutIndexedHead(t *testing.T) {
 	}
 	if decoded.APIVersion != "v1" || decoded.ProtocolVersion != "1" || decoded.Deployment.Registry == nil || *decoded.Deployment.Registry != *d.Registry || decoded.Deployment.Protocol != d.Protocol {
 		t.Fatalf("wrong deployment: %+v", decoded)
+	}
+}
+
+func TestPublicDetectionNeedsNoAPIKey(t *testing.T) {
+	f, rng := anchor()
+	result := call(t, testServer(t, f, true), "invisi_detectOutputs", []any{rng, "0x" + strings.Repeat("01", 32)}, "")
+	if result.Error != nil {
+		t.Fatalf("enabled public detection rejected: %+v", result.Error)
+	}
+	if f.outputReads != 1 {
+		t.Fatal("enabled detection did not read candidates")
+	}
+}
+
+func TestDetectionCapacityReturnsRetryableRPCError(t *testing.T) {
+	f, rng := anchor()
+	api, err := New(f, model.Deployment{ChainID: "31337"}, 24, true, "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range cap(api.detectionSlots) {
+		api.detectionSlots <- struct{}{}
+	}
+	handler, err := HTTPHandler(api)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := call(t, handler, "invisi_detectOutputs", []any{rng, "0x" + strings.Repeat("01", 32)}, "")
+	if result.Error == nil || result.Error.Code != -32005 {
+		t.Fatalf("wrong overload error: %+v", result.Error)
+	}
+	if f.outputReads != 0 {
+		t.Fatal("overloaded detection read backend")
+	}
+	if status := call(t, handler, "invisi_getStatus", []any{}, ""); status.Error != nil {
+		t.Fatal("detection overload blocked ordinary queries")
 	}
 }

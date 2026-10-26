@@ -378,3 +378,26 @@ func TestDeploymentMetadataRoundTrip(t *testing.T) {
 		t.Fatal("incomplete registry metadata accepted")
 	}
 }
+
+func TestHTTPConcurrencyConfiguration(t *testing.T) {
+	cfg := Config{}
+	if err := cfg.Validate(); err != nil || cfg.MaxConcurrentRequests != 64 {
+		t.Fatalf("invalid defaults: %+v %v", cfg, err)
+	}
+	for _, value := range []int{-1, 4097} {
+		cfg := Config{MaxConcurrentRequests: value}
+		if err := cfg.Validate(); err == nil {
+			t.Fatalf("invalid concurrency limit accepted: %d", value)
+		}
+	}
+}
+
+func TestPublishedConfigurationExample(t *testing.T) {
+	cfg, err := Load("../../config.example.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MaxConcurrentRequests != 64 || len(cfg.Chains) != 1 || !cfg.Chains[0].DetectionEnabled {
+		t.Fatalf("unexpected example configuration: %+v", cfg)
+	}
+}

@@ -16,6 +16,7 @@ import (
 
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/config"
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/protocol"
+	apirpc "github.com/invisi-lab/invisi-protocol-rpc/internal/rpc"
 )
 
 // liveChain owns its client, database, workers and requests. Route acquisition and
@@ -193,7 +194,7 @@ func runWithInterval(ctx context.Context, cfg config.Config, dir string, interva
 		router.order = append(router.order, id)
 	}
 	initial = nil // ownership transferred to the live router
-	server := &http.Server{Addr: cfg.Listen, Handler: router, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 35 * time.Second, WriteTimeout: 35 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10, BaseContext: func(net.Listener) context.Context { return ctx }}
+	server := &http.Server{Addr: cfg.Listen, Handler: apirpc.LimitConcurrentRequests(router, cfg.MaxConcurrentRequests), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 35 * time.Second, WriteTimeout: 35 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10, BaseContext: func(net.Listener) context.Context { return ctx }}
 	errs := make(chan error, 1)
 	go func() { errs <- server.Serve(listener) }()
 	defer func() {

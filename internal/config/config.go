@@ -29,13 +29,15 @@ type Chain struct {
 	Deployment       model.Deployment `json:"deployment"`
 	Confirmations    uint64           `json:"confirmations"`
 	PollSeconds      int              `json:"pollSeconds"`
+	DetectionEnabled bool             `json:"detectionEnabled"`
 	DetectionBits    int              `json:"detectionBits"`
 	SnapshotInterval string           `json:"snapshotInterval"`
 }
 
 type Config struct {
-	Listen string  `json:"listen"`
-	Chains []Chain `json:"chains"`
+	Listen                string  `json:"listen"`
+	MaxConcurrentRequests int     `json:"maxConcurrentRequests"`
+	Chains                []Chain `json:"chains"`
 }
 
 func File(dir string) string             { return filepath.Join(dir, "config.json") }
@@ -135,6 +137,12 @@ func (c *Chain) Validate() error {
 }
 
 func (c *Config) Validate() error {
+	if c.MaxConcurrentRequests == 0 {
+		c.MaxConcurrentRequests = 64
+	}
+	if c.MaxConcurrentRequests < 1 || c.MaxConcurrentRequests > 4096 {
+		return errors.New("maxConcurrentRequests must be 1..4096")
+	}
 	if c.Listen == "" {
 		c.Listen = "127.0.0.1:8080"
 	}

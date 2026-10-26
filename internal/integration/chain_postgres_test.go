@@ -225,7 +225,7 @@ func TestLocalChainPostgresLifecycle(t *testing.T) {
 	if contractVersion != "1" {
 		t.Fatalf("expected deployed Protocol VERSION 1, got %s", contractVersion)
 	}
-	api, err := servicerpc.New(store, deployment, 24, "integration-token", contractVersion)
+	api, err := servicerpc.New(store, deployment, 24, true, contractVersion)
 	must(t, err)
 	handler, err := servicerpc.HTTPHandler(api)
 	must(t, err)
@@ -234,7 +234,7 @@ func TestLocalChainPostgresLifecycle(t *testing.T) {
 	public, err := gethrpc.DialHTTP(server.URL)
 	must(t, err)
 	defer public.Close()
-	detected, err := gethrpc.DialOptions(ctx, server.URL, gethrpc.WithHeader("Authorization", "Bearer integration-token"))
+	detected, err := gethrpc.DialOptions(ctx, server.URL)
 	must(t, err)
 	defer detected.Close()
 	var rpcMembership model.Membership

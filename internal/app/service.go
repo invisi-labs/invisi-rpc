@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"math/big"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -142,7 +141,7 @@ func prepareChain(ctx context.Context, c config.Chain, reconcile bool) (runtime 
 	if err != nil {
 		return nil, fmt.Errorf("validate saved index: %w", err)
 	}
-	api, err := apirpc.New(store, c.Deployment, c.DetectionBits, os.Getenv("FMD_API_TOKEN"), contractVersion)
+	api, err := apirpc.New(store, c.Deployment, c.DetectionBits, c.DetectionEnabled, contractVersion)
 	if err != nil {
 		return nil, err
 	}

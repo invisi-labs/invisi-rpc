@@ -216,3 +216,22 @@ func TestCommandDefaultDirectoryDoesNotOverwriteExecutable(t *testing.T) {
 		t.Fatal("modified existing executable")
 	}
 }
+
+func TestDetectionSwitchIsIndependentOfCredentials(t *testing.T) {
+	for _, enabled := range []bool{true, false} {
+		t.Run(map[bool]string{true: "public-enabled", false: "disabled"}[enabled], func(t *testing.T) {
+			dir := t.TempDir()
+			catalog := privateCatalog(t, privateDeployments())
+			t.Setenv("INVISI_RPC_DETECTION_ENABLED", map[bool]string{true: "true", false: "false"}[enabled])
+			runCommand(t, "invisi-protocol-rpc", "init", "--dir", dir)
+			runCommand(t, "invisi-protocol-rpc", "chain", "add", "--dir", dir, "--deployment-file", catalog, "--rpc", "http://localhost:8545", "31337")
+			cfg, err := config.LoadDir(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Chains[0].DetectionEnabled != enabled {
+				t.Fatalf("detection configuration lost: %+v", cfg.Chains[0])
+			}
+		})
+	}
+}
