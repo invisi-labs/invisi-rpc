@@ -46,7 +46,7 @@ func TestCatalogFilesAreIndependent(t *testing.T) {
 		t.Fatalf("file profile %+v %v", d, e)
 	}
 	p := filepath.Join(t.TempDir(), "private.json")
-	profile := deployment.Profile{ProtocolAddress: d.Protocol, RuntimeCodeHash: d.RuntimeCodeHash, FromBlock: 25}
+	profile := deployment.Profile{DeploymentProfile: model.DeploymentProfile{Protocol: model.ContractDeployment{Address: d.Protocol, RuntimeCodeHash: d.RuntimeCodeHash, FromBlock: 25}}}
 	writeJSON(t, p, deployment.Catalog{Version: 1, Chains: map[string]deployment.Profile{"1": profile, "10": profile}})
 	private, e := deployment.Load(p)
 	if e != nil || len(private.Chains) != 2 {
@@ -75,8 +75,8 @@ func TestCatalogRejectsInvalidInput(t *testing.T) {
 		strings.Replace(good, `"31337":`, `"0":`, 1),
 		strings.Replace(good, `"31337":`, `"-1":`, 1),
 		strings.Replace(good, `"name":`, `"unexpected":`, 1),
-		strings.Replace(good, strings.ToLower(c.Chains["31337"].ProtocolAddress.Hex()), common.Address{}.Hex(), 1),
-		strings.Replace(good, c.Chains["31337"].RuntimeCodeHash.Hex(), common.Hash{}.Hex(), 1),
+		strings.Replace(good, strings.ToLower(c.Chains["31337"].Protocol.Address.Hex()), common.Address{}.Hex(), 1),
+		strings.Replace(good, c.Chains["31337"].Protocol.RuntimeCodeHash.Hex(), common.Hash{}.Hex(), 1),
 		good + ` {}`, `{"version":1,"chains":{}}`,
 	}
 	for i, raw := range cases {
@@ -342,5 +342,39 @@ func TestUpdateLockCancellation(t *testing.T) {
 	after, _ := os.ReadFile(File(dir))
 	if !bytes.Equal(before, after) {
 		t.Fatal("canceled update changed bytes")
+	}
+}
+
+func TestDeploymentMetadataRoundTrip(t *testing.T) {
+	catalog, err := deployment.Load("../../deployment.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := catalog.Resolve("31337")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Registry == nil {
+		t.Fatal("deployment metadata lost")
+	}
+	chain := validChain("31337", "chain.sqlite")
+	chain.Deployment = d
+	raw, err := json.Marshal(chain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var restored Chain
+	if err := json.Unmarshal(raw, &restored); err != nil {
+		t.Fatal(err)
+	}
+	if err := restored.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if restored.Deployment.Registry == nil || *restored.Deployment.Registry != *d.Registry {
+		t.Fatal("configuration metadata lost")
+	}
+	restored.Deployment.Registry.RuntimeCodeHash = common.Hash{}
+	if err := restored.Validate(); err == nil {
+		t.Fatal("incomplete registry metadata accepted")
 	}
 }

@@ -84,6 +84,9 @@ func readRaw(path string) (Config, error) {
 	return c, nil
 }
 func (c *Chain) Validate() error {
+	if err := c.Deployment.ValidateMetadata(); err != nil {
+		return err
+	}
 	if c.Database.Driver == "postgres" && c.Database.URL == "" {
 		c.Database.URL = os.Getenv("DATABASE_URL")
 	}

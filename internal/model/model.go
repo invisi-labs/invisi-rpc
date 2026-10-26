@@ -7,11 +7,18 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
-type Deployment struct {
-	ChainID         string         `json:"chainId"`
-	Protocol        common.Address `json:"protocolAddress"`
-	FromBlock       uint64         `json:"fromBlock"`
+type ContractDeployment struct {
+	Address         common.Address `json:"address"`
 	RuntimeCodeHash common.Hash    `json:"runtimeCodeHash"`
+	FromBlock       uint64         `json:"fromBlock"`
+}
+
+type Deployment struct {
+	Registry        *ContractDeployment `json:"registry,omitempty"`
+	ChainID         string              `json:"chainId"`
+	Protocol        common.Address      `json:"protocolAddress"`
+	FromBlock       uint64              `json:"fromBlock"`
+	RuntimeCodeHash common.Hash         `json:"runtimeCodeHash"`
 }
 type Block struct {
 	Number     uint64      `json:"number"`

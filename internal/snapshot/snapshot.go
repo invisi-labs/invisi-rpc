@@ -64,7 +64,8 @@ func checkHeader(h Header, dep *model.Deployment) error {
 	if h.Checkpoint != nil {
 		return errors.New("checkpoint belongs in snapshot footer")
 	}
-	if dep != nil && h.Deployment != *dep {
+	// The independent registry does not change indexed pool identity.
+	if dep != nil && (h.Deployment.ChainID != dep.ChainID || h.Deployment.Protocol != dep.Protocol || h.Deployment.FromBlock != dep.FromBlock || h.Deployment.RuntimeCodeHash != dep.RuntimeCodeHash) {
 		return errors.New("snapshot deployment differs from configured chain, protocol, runtime code hash, or start block")
 	}
 	return nil

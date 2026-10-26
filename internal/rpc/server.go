@@ -57,6 +57,9 @@ type Status struct {
 }
 
 func New(store Backend, d model.Deployment, bits int, token string, protocolVersion string) (*API, error) {
+	if err := d.ValidateMetadata(); err != nil {
+		return nil, err
+	}
 	if protocolVersion != protocol.SupportedVersion {
 		return nil, errors.New("unsupported Protocol VERSION for " + protocol.APIVersion)
 	}
@@ -69,6 +72,18 @@ func (a *API) GetStatus(ctx context.Context) (Status, error) {
 	h, e := a.Store.Checkpoint(ctx)
 	return Status{VersionInfo: a.version, Deployment: a.Deployment, IndexedHead: h, DetectionEnabled: a.detectionToken != "", CheckedBits: a.DetectionBits}, e
 }
+
+// GetDeployment is available before indexing has reached its first checkpoint.
+func (a *API) GetDeployment() struct {
+	VersionInfo
+	Deployment model.Deployment `json:"deployment"`
+} {
+	return struct {
+		VersionInfo
+		Deployment model.Deployment `json:"deployment"`
+	}{a.version, a.Deployment}
+}
+
 func (a *API) GetVersion() VersionInfo { return a.version }
 
 func (a *API) GetBlock(ctx context.Context, number uint64) (*model.Batch, error) {

@@ -18,11 +18,10 @@ import (
 const DefaultFile = "deployment.json"
 
 type Profile struct {
-	Name            string         `json:"name,omitempty"`
-	ProtocolAddress common.Address `json:"protocolAddress"`
-	RuntimeCodeHash common.Hash    `json:"runtimeCodeHash"`
-	FromBlock       uint64         `json:"fromBlock"`
+	Name string `json:"name,omitempty"`
+	model.DeploymentProfile
 }
+
 type Catalog struct {
 	Version int                `json:"version"`
 	Chains  map[string]Profile `json:"chains"`
@@ -73,10 +72,13 @@ func Load(path string) (Catalog, error) {
 	return c, nil
 }
 func validateProfile(p Profile) error {
-	if p.ProtocolAddress == (common.Address{}) || p.RuntimeCodeHash == (common.Hash{}) {
+	if err := (model.Deployment{Registry: p.Registry}).ValidateMetadata(); err != nil {
+		return err
+	}
+	if p.Protocol.Address == (common.Address{}) || p.Protocol.RuntimeCodeHash == (common.Hash{}) {
 		return errors.New("nonzero protocolAddress and runtimeCodeHash are required")
 	}
-	if p.FromBlock > math.MaxInt64 {
+	if p.Protocol.FromBlock > math.MaxInt64 {
 		return errors.New("fromBlock exceeds database range")
 	}
 	return nil
@@ -92,7 +94,7 @@ func (c Catalog) Resolve(chainID string) (model.Deployment, error) {
 	if err := validateProfile(p); err != nil {
 		return model.Deployment{}, err
 	}
-	return model.Deployment{ChainID: chainID, Protocol: p.ProtocolAddress, RuntimeCodeHash: p.RuntimeCodeHash, FromBlock: p.FromBlock}, nil
+	return model.Deployment{Registry: p.Registry, ChainID: chainID, Protocol: p.Protocol.Address, RuntimeCodeHash: p.Protocol.RuntimeCodeHash, FromBlock: p.Protocol.FromBlock}, nil
 }
 
 // Reject duplicate keys before typed decoding; encoding/json otherwise silently

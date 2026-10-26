@@ -45,7 +45,7 @@ Maintain deployment records in this file. To use a file at another location:
   --deployment-file ./private-deployment.json
 ```
 
-The file structure is `{ "version": 1, "chains": { "42161": { "name": "Private Arbitrum", "protocolAddress": "0x…", "runtimeCodeHash": "0x…", "fromBlock": 123456 } } }`. Use real deployment values; zero addresses and hashes are rejected. `runtimeCodeHash` is Keccak-256 of deployed runtime bytecode, including library addresses and immutables. `fromBlock` is the Protocol creation block.
+The file structure is `{ "version": 1, "chains": { "42161": { "name": "Private Arbitrum", "protocol": { "address": "0x…", "runtimeCodeHash": "0x…", "fromBlock": 123456 } } } }`. Use real deployment values; zero addresses and hashes are rejected. `runtimeCodeHash` is Keccak-256 of deployed runtime bytecode, including library addresses and immutables. `fromBlock` is the Protocol creation block.
 
 `chain add` resolves selected records into `config.json`. Subsequent catalog changes do not silently retarget an initialized node. `run` verifies every RPC's chain ID and runtime hash before serving. The database also rejects mismatched persisted deployment information.
 
@@ -158,6 +158,7 @@ POST JSON-RPC 2.0 to `/v1/chains/<chainId>` using positional parameter arrays. `
 | Method | Parameters | Result |
 | --- | --- | --- |
 | `invisi_getVersion` | `[]` | API and on-chain Protocol versions |
+| `invisi_getDeployment` | `[]` | Protocol and optional registry deployment profile, API and Protocol versions; available before the first indexed block |
 | `invisi_getStatus` | `[]` | Deployment, indexed head, detection settings |
 | `invisi_getBlock` | `[blockNumber]` | Complete indexed block, raw logs and normalized data |
 | `invisi_getEvents` | `[range]` | Events in canonical log order |
@@ -217,3 +218,7 @@ TEST_CHAIN_RPC_URL=http://127.0.0.1:8545 TEST_DATABASE_URL='postgres://invisi:lo
 SQLite tests run by default. PostgreSQL/EVM tests explicitly skip without their environment variables. EVM tests require loopback chain 31337 with the contract repository's local deployment; its mock verifiers do not establish real proving correctness.
 
 The Docker image includes `/deployment.json`; mount your own file there to select deployment records. It sets `INVISI_RPC_DATA_DIR=/data` and runs `run`; mount an initialized data directory there and set `listen` to `0.0.0.0:8080` inside the container. Initialize the volume with `init /data`, then use `chain add ID --dir /data --rpc URL` in the same mounted volume. Chain management commands may run in a separate container sharing the volume. Keep PostgreSQL credentials out of images.
+
+### SDK deployment discovery
+
+Clients call `invisi_getDeployment` on `/v1/chains/<chainId>` before constructing their Protocol object. The response contains `apiVersion`, `protocolVersion` and `deployment`. Deployment fields are `chainId`, `protocol` and optional `registry`. Both contracts use `address`, `runtimeCodeHash` and `fromBlock`, represented by one shared contract deployment type. Set `registry` in the chain's `deployment.json` profile before `chain add`; they are copied into the initialized configuration. Existing initialized configurations can set these metadata fields in their deployment section while stopped. Public and private installations use the same interface. Deployment metadata identifies the service's selected pool; clients choose a trusted service or independently pin the deployment, then verify chain facts through Chain RPC.

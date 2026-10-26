@@ -337,3 +337,29 @@ func TestRejectUnsupportedProtocolVersion(t *testing.T) {
 		}
 	}
 }
+
+func TestDeploymentWithoutIndexedHead(t *testing.T) {
+	d := model.Deployment{ChainID: "31337", Protocol: common.HexToAddress("1234"), RuntimeCodeHash: common.HexToHash("4567"), FromBlock: 8, Registry: &model.ContractDeployment{Address: common.HexToAddress("5678"), RuntimeCodeHash: common.HexToHash("6789"), FromBlock: 9}}
+	a, err := New(&fakeBackend{}, d, 24, "", "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := HTTPHandler(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := call(t, h, "invisi_getDeployment", []any{}, "")
+	if result.Error != nil {
+		t.Fatal(result.Error)
+	}
+	var decoded struct {
+		VersionInfo
+		Deployment model.Deployment `json:"deployment"`
+	}
+	if err := json.Unmarshal(result.Result, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.APIVersion != "v1" || decoded.ProtocolVersion != "1" || decoded.Deployment.Registry == nil || *decoded.Deployment.Registry != *d.Registry || decoded.Deployment.Protocol != d.Protocol {
+		t.Fatalf("wrong deployment: %+v", decoded)
+	}
+}

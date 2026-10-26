@@ -36,7 +36,7 @@ func privateCatalog(t *testing.T, deps []model.Deployment) string {
 	t.Helper()
 	catalog := deployment.Catalog{Version: 1, Chains: map[string]deployment.Profile{}}
 	for _, dep := range deps {
-		catalog.Chains[dep.ChainID] = deployment.Profile{Name: "private " + dep.ChainID, ProtocolAddress: dep.Protocol, RuntimeCodeHash: dep.RuntimeCodeHash, FromBlock: dep.FromBlock}
+		catalog.Chains[dep.ChainID] = deployment.Profile{Name: "private " + dep.ChainID, DeploymentProfile: dep.Profile()}
 	}
 	raw, err := json.Marshal(catalog)
 	if err != nil {
