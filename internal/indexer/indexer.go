@@ -1,0 +1,141 @@
+// Package indexer follows a single protocol deployment on its canonical chain.
+package indexer
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
+	"math/big"
+)
+
+type Chain interface {
+	ChainID(context.Context) (*big.Int, error)
+	HeaderByNumber(context.Context, *big.Int) (*types.Header, error)
+	CodeAt(context.Context, common.Address, *big.Int) ([]byte, error)
+	FilterLogs(context.Context, ethereum.FilterQuery) ([]types.Log, error)
+}
+type Store interface {
+	Checkpoint(context.Context) (*model.Block, error)
+	Block(context.Context, uint64) (*model.Block, error)
+	Apply(context.Context, model.Batch) error
+	Rollback(context.Context, uint64) error
+}
+type Decoder interface {
+	Decode(model.Block, []types.Log) (model.Batch, error)
+}
+type Indexer struct {
+	Chain         Chain
+	Store         Store
+	Decoder       Decoder
+	Deployment    model.Deployment
+	Confirmations uint64
+}
+
+func (i *Indexer) Verify(ctx context.Context) error {
+	id, err := i.Chain.ChainID(ctx)
+	if err != nil {
+		return err
+	}
+	if id.String() != i.Deployment.ChainID {
+		return fmt.Errorf("chain ID mismatch: got %s", id)
+	}
+	code, err := i.Chain.CodeAt(ctx, i.Deployment.Protocol, nil)
+	if err != nil {
+		return err
+	}
+	if len(code) == 0 || crypto.Keccak256Hash(code) != i.Deployment.RuntimeCodeHash {
+		return errors.New("protocol runtime code hash mismatch")
+	}
+	return nil
+}
+
+// Step processes at most one confirmed block. A false result means the indexer is caught up.
+func (i *Indexer) Step(ctx context.Context) (bool, error) {
+	head, err := i.Chain.HeaderByNumber(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	cp, err := i.Store.Checkpoint(ctx)
+	if err != nil {
+		return false, err
+	}
+	// Reconcile even when no new confirmed blocks are available.
+	for cp != nil {
+		if cp.Number > head.Number.Uint64() {
+			if cp.Number <= i.Deployment.FromBlock {
+				return false, errors.New("chain head precedes deployment; verify deployment before reset")
+			}
+			if err = i.Store.Rollback(ctx, cp.Number-1); err != nil {
+				return false, err
+			}
+			cp, err = i.Store.Checkpoint(ctx)
+			if err != nil {
+				return false, err
+			}
+			continue
+		}
+		h, e := i.Chain.HeaderByNumber(ctx, new(big.Int).SetUint64(cp.Number))
+		if e != nil {
+			return false, e
+		}
+		if h.Hash() == cp.Hash {
+			break
+		}
+		if cp.Number == i.Deployment.FromBlock {
+			return false, errors.New("deployment starting block was reorganized; reset database after verifying deployment")
+		}
+		ancestor := cp.Number - 1
+		if err = i.Store.Rollback(ctx, ancestor); err != nil {
+			return false, err
+		}
+		cp, err = i.Store.Checkpoint(ctx)
+		if err != nil {
+			return false, err
+		}
+	}
+	next := i.Deployment.FromBlock
+	if cp != nil {
+		next = cp.Number + 1
+	}
+	if head.Number.Uint64() < i.Confirmations || next > head.Number.Uint64()-i.Confirmations {
+		return false, nil
+	}
+	h, err := i.Chain.HeaderByNumber(ctx, new(big.Int).SetUint64(next))
+	if err != nil {
+		return false, err
+	}
+	if cp != nil && h.ParentHash != cp.Hash {
+		return false, errors.New("chain changed during indexing; retry")
+	}
+	hash := h.Hash()
+	logs, err := i.Chain.FilterLogs(ctx, ethereum.FilterQuery{BlockHash: &hash, Addresses: []common.Address{i.Deployment.Protocol}})
+	if err != nil {
+		return false, err
+	}
+	for _, l := range logs {
+		if l.BlockHash != hash || l.BlockNumber != next || l.Address != i.Deployment.Protocol || l.Removed {
+			return false, errors.New("RPC returned inconsistent log")
+		}
+	}
+	b, err := i.Decoder.Decode(model.Block{Number: next, Hash: hash, ParentHash: h.ParentHash}, logs)
+	if err != nil {
+		return false, fmt.Errorf("decode block %d: %w", next, err)
+	}
+	// Catch a concurrent reorg before publishing the block. Root validation uses the block hash too.
+	current, err := i.Chain.HeaderByNumber(ctx, new(big.Int).SetUint64(next))
+	if err != nil {
+		return false, err
+	}
+	if current.Hash() != hash {
+		return false, errors.New("chain changed during indexing; retry")
+	}
+	if err = i.Store.Apply(ctx, b); err != nil {
+		return false, fmt.Errorf("apply block %d: %w", next, err)
+	}
+	return true, nil
+}

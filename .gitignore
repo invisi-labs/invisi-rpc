@@ -31,3 +31,10 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Local service configuration and build output
+config.json
+/invisi-protocol-rpc
+.idea/
+
+/bin/
