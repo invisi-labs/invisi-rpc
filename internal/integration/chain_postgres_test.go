@@ -59,7 +59,7 @@ func TestLocalChainPostgresLifecycle(t *testing.T) {
 	if id.Cmp(big.NewInt(31337)) != 0 {
 		t.Fatal("integration requires chain ID 31337")
 	}
-	catalog, err := deployments.Load("../../deployment.json")
+	catalog, err := deployments.Load("../../testdata/deployment-fixture.json")
 	must(t, err)
 	local, err := catalog.Resolve("31337")
 	must(t, err)

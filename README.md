@@ -9,7 +9,8 @@ Requirements: Go 1.26+, an EVM Chain RPC for each selected chain, and either SQL
 ```sh
 go build -o ./bin/invisi-protocol-rpc ./cmd
 
-# Use deployment.json from the current directory.
+# Use the catalog published by the Protocol deployment tooling.
+export INVISI_RPC_DEPLOYMENT_FILE=../invisi-protocol/deployment/deployment.json
 ./bin/invisi-protocol-rpc init
 ./bin/invisi-protocol-rpc chain add 31337 --rpc http://127.0.0.1:8545
 ./bin/invisi-protocol-rpc run
@@ -32,17 +33,17 @@ Each chain has independent indexing, database state and snapshots; all share one
 
 ### Deployment catalog
 
-[deployment.json](deployment.json) is the sole source of Protocol addresses, runtime bytecode hashes and starting blocks. By default, `chain add` reads `./deployment.json` from the current working directory. Use `--deployment-file PATH` or `INVISI_RPC_DEPLOYMENT_FILE` to select its location. No deployment records are embedded in the binary. A missing or invalid file, or an absent chain ID, causes `chain add` to fail without modifying the configuration.
+The canonical catalog is [invisi-protocol/deployment/deployment.json](../invisi-protocol/deployment/deployment.json). Protocol deployment tooling owns this single file; RPC does not keep a separate catalog. It contains Protocol addresses, runtime bytecode hashes and starting blocks for all networks, keyed only by chain ID. By default, `chain add` reads `./deployment.json` from the current working directory. Use `--deployment-file PATH` or `INVISI_RPC_DEPLOYMENT_FILE` to select its location. No deployment records are embedded in the binary. A missing or invalid file, or an absent chain ID, causes `chain add` to fail without modifying the configuration.
 
-The current catalog contains only the verified **31337 local deployment with mock verifiers**. Public-network deployment files in the contract repository contain empty placeholders, so those networks have no records yet. Add reviewed public deployment records when available; unsupported chain IDs return an error.
+The current catalog contains the controlled **31337 local deployment with mock verifiers**. Only completed deployments belong in the catalog; absent chain IDs return an error. Mainnets and testnets use the same structure.
 
-Maintain deployment records in this file. To use a file at another location:
+Deployment commands generate the records after checking successful receipts and runtime code. Point RPC at that output without manually copying its fields. For a private deployment file:
 
 ```sh
 ./bin/invisi-protocol-rpc init ./private-data
 ./bin/invisi-protocol-rpc chain add 42161 --dir ./private-data \
   --rpc https://YOUR_ARBITRUM_RPC \
-  --deployment-file ./private-deployment.json
+  --deployment-file /path/to/private-protocol/deployment/deployment.json
 ```
 
 The file structure is `{ "version": 1, "chains": { "42161": { "name": "Private Arbitrum", "protocol": { "address": "0x…", "runtimeCodeHash": "0x…", "fromBlock": 123456 } } } }`. Use real deployment values; zero addresses and hashes are rejected. `runtimeCodeHash` is Keccak-256 of deployed runtime bytecode, including library addresses and immutables. `fromBlock` is the Protocol creation block.
@@ -228,7 +229,7 @@ TEST_CHAIN_RPC_URL=http://127.0.0.1:8545 TEST_DATABASE_URL='postgres://invisi:lo
 
 SQLite tests run by default. PostgreSQL/EVM tests explicitly skip without their environment variables. EVM tests require loopback chain 31337 with the contract repository's local deployment; its mock verifiers do not establish real proving correctness.
 
-The Docker image includes `/deployment.json`; mount your own file there to select deployment records. It sets `INVISI_RPC_DATA_DIR=/data` and runs `run`; mount an initialized data directory there and set `listen` to `0.0.0.0:8080` inside the container. Initialize the volume with `init /data`, then use `chain add ID --dir /data --rpc URL` in the same mounted volume. Chain management commands may run in a separate container sharing the volume. Keep PostgreSQL credentials out of images.
+The Docker image contains no deployment catalog. Mount `invisi-protocol/deployment/deployment.json` or a private deployment output read-only at `/deployment.json`; the image sets `INVISI_RPC_DEPLOYMENT_FILE` to that path. It sets `INVISI_RPC_DATA_DIR=/data` and runs `run`; mount an initialized data directory there and set `listen` to `0.0.0.0:8080` inside the container. Initialize the volume with `init /data`, then use `chain add ID --dir /data --rpc URL` in the same mounted volume. Chain management commands may run in a separate container sharing the volume. Keep PostgreSQL credentials out of images.
 
 ### SDK deployment discovery
 

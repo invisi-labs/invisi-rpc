@@ -2,7 +2,7 @@
   "version": 1,
   "chains": {
     "31337": {
-      "name": "Anvil",
+      "name": "Test fixture",
       "protocol": {
         "address": "0xba0791095b4263a536B30E1C1FAbA2686CCb8b46",
         "runtimeCodeHash": "0x1f65d93baefe745834bfd8d0bd20ed740a4e09892a32b18c7058df7330e6c701",

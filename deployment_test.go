@@ -7,7 +7,7 @@ import (
 )
 
 func TestLoadDefaultFileOnly(t *testing.T) {
-	raw, err := os.ReadFile("deployment.json")
+	raw, err := os.ReadFile("testdata/deployment-fixture.json")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -34,7 +34,7 @@ func writeJSON(t *testing.T, path string, v any) {
 	}
 }
 func TestCatalogFilesAreIndependent(t *testing.T) {
-	c, e := deployment.Load("../../deployment.json")
+	c, e := deployment.Load("../../testdata/deployment-fixture.json")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -62,7 +62,7 @@ func TestCatalogFilesAreIndependent(t *testing.T) {
 	}
 }
 func TestCatalogRejectsInvalidInput(t *testing.T) {
-	c, e := deployment.Load("../../deployment.json")
+	c, e := deployment.Load("../../testdata/deployment-fixture.json")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -346,7 +346,7 @@ func TestUpdateLockCancellation(t *testing.T) {
 }
 
 func TestDeploymentMetadataRoundTrip(t *testing.T) {
-	catalog, err := deployment.Load("../../deployment.json")
+	catalog, err := deployment.Load("../../testdata/deployment-fixture.json")
 	if err != nil {
 		t.Fatal(err)
 	}
