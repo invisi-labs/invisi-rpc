@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -257,5 +258,57 @@ func TestPostgresExportConsistentWithConcurrentAppend(t *testing.T) {
 	_, err = s.Export(ctx, func(model.Batch) error { return failure })
 	if !errors.Is(err, failure) {
 		t.Fatalf("consumer error: %v", err)
+	}
+}
+
+func TestPostgresCreditBlockContextAndFormatValidation(t *testing.T) {
+	url := os.Getenv("TEST_DATABASE_URL")
+	if url == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	ctx := context.Background()
+	dep := model.Deployment{ChainID: fmt.Sprintf("credit-%d", time.Now().UnixNano()), FromBlock: 1}
+	s, err := Open(ctx, url, dep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	defer s.pool.Exec(ctx, "DELETE FROM invisi_index_formats WHERE deployment=$1", s.key)
+	defer s.pool.Exec(ctx, "DELETE FROM invisi_deployments WHERE deployment=$1", s.key)
+	defer s.pool.Exec(ctx, "DELETE FROM invisi_blocks WHERE deployment=$1", s.key)
+	b := model.Batch{Block: model.Block{Number: 1, Hash: common.HexToHash("1"), Timestamp: 2678400}, CreatedTrees: []uint64{1}, Events: []model.Event{{Name: "CreditDraw"}}, Outputs: []model.Output{{Kind: "CreditDraw"}}}
+	if err = s.Apply(ctx, b); err != nil {
+		t.Fatal(err)
+	}
+	cp, err := s.Checkpoint(ctx)
+	if err != nil || *cp != b.Block {
+		t.Fatalf("checkpoint %v %v", cp, err)
+	}
+	events, err := s.Events(ctx, 1, 1, 10)
+	if err != nil || len(events) != 1 || events[0].Block != b.Block {
+		t.Fatalf("events %v %v", events, err)
+	}
+	outputs, err := s.Outputs(ctx, 1, 1, 10)
+	if err != nil || len(outputs) != 1 || outputs[0].Block != b.Block {
+		t.Fatalf("outputs %v %v", outputs, err)
+	}
+	roots, err := s.Roots(ctx, 1, 10)
+	if err != nil || len(roots) != 1 || roots[0].Block != b.Block {
+		t.Fatalf("roots %v %v", roots, err)
+	}
+	if _, err = s.pool.Exec(ctx, "UPDATE invisi_blocks SET batch=batch #- '{block,timestamp}' WHERE deployment=$1", s.key); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Checkpoint(ctx); err == nil {
+		t.Fatal("accepted current block record missing timestamp")
+	}
+	if _, err = s.pool.Exec(ctx, "UPDATE invisi_index_formats SET version=99 WHERE deployment=$1", s.key); err != nil {
+		t.Fatal(err)
+	}
+	if invalid, e := Open(ctx, url, dep); e == nil {
+		invalid.Close()
+		t.Fatal("accepted corrupt current index format")
+	} else if !strings.Contains(e.Error(), "unsupported index format") {
+		t.Fatal(e)
 	}
 }

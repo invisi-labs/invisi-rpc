@@ -98,6 +98,8 @@ jobs:
       - name: Smoke test published image
         env:
           DIGEST: ${{ steps.image.outputs.digest }}
+          SOURCE_COMMIT: ${{ steps.source.outputs.commit }}
         run: |
           docker run --rm "$IMAGE@$DIGEST" --help
+          echo "Source commit: \`$SOURCE_COMMIT\`." >> "$GITHUB_STEP_SUMMARY"
           echo "Published \`$IMAGE@$DIGEST\` for \`$RELEASE_TAG\`." >> "$GITHUB_STEP_SUMMARY"

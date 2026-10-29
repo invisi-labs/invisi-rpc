@@ -108,6 +108,16 @@ func OpenSQLite(ctx context.Context, path string, d model.Deployment) (*SQLiteSt
 		}
 	}
 	if e == nil {
+		_, e = tx.Exec(ctx, "INSERT INTO invisi_index_formats VALUES(?1,1) ON CONFLICT DO NOTHING", s.key)
+	}
+	if e == nil {
+		var version int
+		e = tx.QueryRow(ctx, "SELECT version FROM invisi_index_formats WHERE deployment=?1", s.key).Scan(&version)
+		if e == nil && version != 1 {
+			e = errors.New("unsupported index format")
+		}
+	}
+	if e == nil {
 		e = tx.Commit(ctx)
 	}
 	if e != nil {
@@ -144,6 +154,8 @@ CREATE TABLE IF NOT EXISTS invisi_nullifiers (
 CREATE TABLE IF NOT EXISTS invisi_deployments (
  deployment TEXT PRIMARY KEY, from_block INTEGER NOT NULL, runtime_code_hash BLOB NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS invisi_index_formats (deployment TEXT PRIMARY KEY, version INTEGER NOT NULL);
 `
 
 type sqliteQuerier interface {
@@ -152,13 +164,15 @@ type sqliteQuerier interface {
 
 func (s *SQLiteStore) checkpoint(ctx context.Context, q sqliteQuerier) (*model.Block, error) {
 	var b model.Block
-	var h, p []byte
-	err := q.QueryRow(ctx, "SELECT number,hash,parent_hash FROM invisi_blocks WHERE deployment=?1 ORDER BY number DESC LIMIT 1", s.key).Scan(&b.Number, &h, &p)
+	var raw []byte
+	err := q.QueryRow(ctx, "SELECT batch->'block' FROM invisi_blocks WHERE deployment=?1 ORDER BY number DESC LIMIT 1", s.key).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
-	b.Hash = common.BytesToHash(h)
-	b.ParentHash = common.BytesToHash(p)
+	if err != nil {
+		return nil, err
+	}
+	err = json.Unmarshal(raw, &b)
 	return &b, err
 }
 func (s *SQLiteStore) Checkpoint(ctx context.Context) (*model.Block, error) {
@@ -190,13 +204,15 @@ func (s *SQLiteStore) Block(ctx context.Context, number uint64) (*model.Block, e
 		return nil, errors.New("block number out of range")
 	}
 	var b model.Block
-	var h, p []byte
-	err := s.readPool.QueryRow(ctx, "SELECT number,hash,parent_hash FROM invisi_blocks WHERE deployment=?1 AND number=?2", s.key, number).Scan(&b.Number, &h, &p)
+	var raw []byte
+	err := s.readPool.QueryRow(ctx, "SELECT batch->'block' FROM invisi_blocks WHERE deployment=?1 AND number=?2", s.key, number).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
-	b.Hash = common.BytesToHash(h)
-	b.ParentHash = common.BytesToHash(p)
+	if err != nil {
+		return nil, err
+	}
+	err = json.Unmarshal(raw, &b)
 	return &b, err
 }
 func (s *SQLiteStore) Apply(ctx context.Context, b model.Batch) error {
@@ -240,6 +256,7 @@ func (s *SQLiteStore) apply(ctx context.Context, tx *sqliteTx, b model.Batch) er
 	} else if b.Block.Number != head.Number+1 || b.Block.ParentHash != head.Hash {
 		return errors.New("block gap or parent hash mismatch")
 	}
+	b.BindBlockContext()
 	raw, err := json.Marshal(b)
 	if err != nil {
 		return err
@@ -376,7 +393,7 @@ func (s *SQLiteStore) Roots(ctx context.Context, treeID uint64, limit int) ([]mo
 	if treeID > math.MaxInt64 {
 		return nil, errors.New("tree ID out of range")
 	}
-	rows, err := s.readPool.Query(ctx, "SELECT r.leaf_count,r.root,b.number,b.hash,b.parent_hash FROM invisi_roots r JOIN invisi_blocks b ON b.deployment=r.deployment AND b.number=r.block_number WHERE r.deployment=?1 AND r.tree_id=?2 ORDER BY r.leaf_count DESC LIMIT ?3", s.key, treeID, limit)
+	rows, err := s.readPool.Query(ctx, "SELECT r.leaf_count,r.root,b.number,b.hash,b.parent_hash,b.batch->'block' FROM invisi_roots r JOIN invisi_blocks b ON b.deployment=r.deployment AND b.number=r.block_number WHERE r.deployment=?1 AND r.tree_id=?2 ORDER BY r.leaf_count DESC LIMIT ?3", s.key, treeID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -384,14 +401,17 @@ func (s *SQLiteStore) Roots(ctx context.Context, treeID uint64, limit int) ([]mo
 	out := []model.Root{}
 	for rows.Next() {
 		var r model.Root
-		var root, h, p []byte
+		var root, h, p, blockJSON []byte
 		r.TreeID = treeID
-		if err = rows.Scan(&r.LeafCount, &root, &r.Block.Number, &h, &p); err != nil {
+		if err = rows.Scan(&r.LeafCount, &root, &r.Block.Number, &h, &p, &blockJSON); err != nil {
 			return nil, err
 		}
 		r.Root = common.BytesToHash(root)
 		r.Block.Hash = common.BytesToHash(h)
 		r.Block.ParentHash = common.BytesToHash(p)
+		if err = json.Unmarshal(blockJSON, &r.Block); err != nil {
+			return nil, err
+		}
 		out = append(out, r)
 	}
 	return out, rows.Err()
@@ -407,14 +427,17 @@ func (s *SQLiteStore) Membership(ctx context.Context, treeID uint64, index uint3
 	defer tx.Rollback(ctx)
 	m := &model.Membership{LeafIndex: index}
 	m.Root.TreeID = treeID
-	var h, p []byte
-	err = tx.QueryRow(ctx, "SELECT r.leaf_count,b.number,b.hash,b.parent_hash FROM invisi_roots r JOIN invisi_blocks b ON b.deployment=r.deployment AND b.number=r.block_number WHERE r.deployment=?1 AND r.tree_id=?2 AND r.root=?3 ORDER BY r.leaf_count DESC LIMIT 1", s.key, treeID, root[:]).Scan(&m.Root.LeafCount, &m.Root.Block.Number, &h, &p)
+	var h, p, blockJSON []byte
+	err = tx.QueryRow(ctx, "SELECT r.leaf_count,b.number,b.hash,b.parent_hash,b.batch->'block' FROM invisi_roots r JOIN invisi_blocks b ON b.deployment=r.deployment AND b.number=r.block_number WHERE r.deployment=?1 AND r.tree_id=?2 AND r.root=?3 ORDER BY r.leaf_count DESC LIMIT 1", s.key, treeID, root[:]).Scan(&m.Root.LeafCount, &m.Root.Block.Number, &h, &p, &blockJSON)
 	if err != nil {
 		return nil, err
 	}
 	m.Root.Root = root
 	m.Root.Block.Hash = common.BytesToHash(h)
 	m.Root.Block.ParentHash = common.BytesToHash(p)
+	if err = json.Unmarshal(blockJSON, &m.Root.Block); err != nil {
+		return nil, err
+	}
 	read := func(level uint8, i uint32) (common.Hash, bool, error) {
 		var data []byte
 		e := tx.QueryRow(ctx, "SELECT hash FROM invisi_nodes WHERE deployment=?1 AND tree_id=?2 AND level=?3 AND node_index=?4 AND leaf_count<=?5 ORDER BY leaf_count DESC LIMIT 1", s.key, treeID, level, i, m.Root.LeafCount).Scan(&data)

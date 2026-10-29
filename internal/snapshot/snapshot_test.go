@@ -503,3 +503,75 @@ func TestRestoreKeepsVerifiedInodeAfterPathReplacement(t *testing.T) {
 		t.Fatal("restored replacement instead of already-verified inode")
 	}
 }
+
+func TestCreditTimestampSnapshotRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	dep, bs := fixture()
+	for i := range bs {
+		bs[i].Block.Timestamp = 2678400 + uint64(i)
+		bs[i].Events = []model.Event{{Name: "CreditDraw"}}
+		bs[i].BindBlockContext()
+	}
+	last := bs[len(bs)-1].Block
+	source := &fakeStore{batches: bs, head: &last}
+	path, err := Export(ctx, source, dep, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dest, err := storage.OpenSQLite(ctx, filepath.Join(t.TempDir(), "credit-time.sqlite"), dep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dest.Close()
+	if err = Restore(ctx, dest, dep, path, ""); err != nil {
+		t.Fatal(err)
+	}
+	events, err := dest.Events(ctx, dep.FromBlock, last.Number, 10)
+	if err != nil || len(events) != len(bs) {
+		t.Fatalf("events %v %v", events, err)
+	}
+	for i, e := range events {
+		if e.Block != bs[i].Block {
+			t.Fatalf("timestamp/context lost: %+v", e)
+		}
+	}
+	cp, err := dest.Checkpoint(ctx)
+	if err != nil || *cp != last {
+		t.Fatalf("checkpoint %v %v", cp, err)
+	}
+}
+
+func TestHeaderDoesNotBindSourceCommit(t *testing.T) {
+	dep, _ := fixture()
+	h := header(dep)
+	raw, err := json.Marshal(h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := fields["sourceCommit"]; exists {
+		t.Fatal("snapshot compatibility must not depend on a source commit")
+	}
+	if err := checkHeader(h, &dep); err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range []string{"format", "profile", "abi", "deployment"} {
+		changed := h
+		switch kind {
+		case "format":
+			changed.Version++
+		case "profile":
+			changed.SourceProfile = "unsupported"
+		case "abi":
+			changed.ABIHash = strings.Repeat("0", 64)
+		case "deployment":
+			changed.Deployment.ChainID = "999999"
+		}
+		if err := checkHeader(changed, &dep); err == nil {
+			t.Fatalf("accepted incompatible %s", kind)
+		}
+	}
+}

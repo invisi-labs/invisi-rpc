@@ -4,7 +4,7 @@
 newline-delimited JSON file. Each record is a single JSON object. Version 1
 contains a header, ordered block records, and a footer:
 
-- The header pins the format version, source profile, contract commit, ABI SHA256,
+- The header pins the format version, source profile, ABI SHA256,
   chain ID, protocol address, runtime code hash, and deployment start block.
 - Each block record contains one complete `model.Batch`, including raw logs and
   normalized events, insertions, deliveries, and nullifiers.
@@ -49,3 +49,7 @@ contract event. Obtain snapshots and their expected hashes from a trusted source
 and validate the imported checkpoint against the configured chain before serving
 it as canonical data. Configure an offline import without a network root
 validator if the caller requires restore to make no historical RPC requests.
+
+Format 1 includes each canonical block timestamp and binds each event/output candidate to that block. Credit limits recovery derives UTC periods from this timestamp. These historical timestamps inherit the trusted snapshot source/checksum requirement above; a checkpoint hash by itself does not authenticate arbitrary normalized historical records. Block records must contain an explicit uint64 timestamp; missing, null, or out-of-range values are rejected.
+
+Source revisions are release provenance, not snapshot compatibility fields. Container releases record the tagged source commit in the OCI `org.opencontainers.image.revision` label and publish it with the image digest. Snapshot validation is independent of source commit identity.

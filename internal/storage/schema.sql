@@ -24,3 +24,5 @@ CREATE TABLE IF NOT EXISTS invisi_nullifiers (
 CREATE TABLE IF NOT EXISTS invisi_deployments (
  deployment text PRIMARY KEY, from_block bigint NOT NULL, runtime_code_hash bytea NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS invisi_index_formats (deployment text PRIMARY KEY, version integer NOT NULL);

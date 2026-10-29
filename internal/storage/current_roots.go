@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"math"
 	"strings"
@@ -27,7 +28,7 @@ func CurrentRootsAt(ctx context.Context, backend Backend, height uint64) ([]mode
 }
 
 func currentRoots(ctx context.Context, backend Backend, height uint64) ([]model.Root, error) {
-	const query = `SELECT r.tree_id,r.leaf_count,r.root,b.number,b.hash,b.parent_hash
+	const query = `SELECT r.tree_id,r.leaf_count,r.root,b.number,b.hash,b.parent_hash,b.batch->'block'
  FROM invisi_roots r JOIN invisi_blocks b ON b.deployment=r.deployment AND b.number=r.block_number
  WHERE r.deployment=$1 AND r.block_number<=$2 AND NOT EXISTS
  (SELECT 1 FROM invisi_roots newer WHERE newer.deployment=r.deployment AND newer.tree_id=r.tree_id AND newer.leaf_count>r.leaf_count AND newer.block_number<=$2)
@@ -59,13 +60,16 @@ func currentRoots(ctx context.Context, backend Backend, height uint64) ([]model.
 	roots := []model.Root{}
 	for rows.Next() {
 		var r model.Root
-		var hash, blockHash, parent []byte
-		if err := rows.Scan(&r.TreeID, &r.LeafCount, &hash, &r.Block.Number, &blockHash, &parent); err != nil {
+		var hash, blockHash, parent, blockJSON []byte
+		if err := rows.Scan(&r.TreeID, &r.LeafCount, &hash, &r.Block.Number, &blockHash, &parent, &blockJSON); err != nil {
 			return nil, err
 		}
 		r.Root = common.BytesToHash(hash)
 		r.Block.Hash = common.BytesToHash(blockHash)
 		r.Block.ParentHash = common.BytesToHash(parent)
+		if err := json.Unmarshal(blockJSON, &r.Block); err != nil {
+			return nil, err
+		}
 		roots = append(roots, r)
 	}
 	return roots, rows.Err()

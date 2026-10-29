@@ -84,6 +84,9 @@ func (i *Indexer) Step(ctx context.Context) (bool, error) {
 			return false, e
 		}
 		if h.Hash() == cp.Hash {
+			if h.Time != cp.Timestamp {
+				return false, errors.New("saved checkpoint timestamp differs from canonical header")
+			}
 			break
 		}
 		if cp.Number == i.Deployment.FromBlock {
@@ -109,6 +112,9 @@ func (i *Indexer) Step(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	if h.Number == nil || !h.Number.IsUint64() || h.Number.Uint64() != next {
+		return false, errors.New("RPC returned inconsistent block header")
+	}
 	if cp != nil && h.ParentHash != cp.Hash {
 		return false, errors.New("chain changed during indexing; retry")
 	}
@@ -122,7 +128,7 @@ func (i *Indexer) Step(ctx context.Context) (bool, error) {
 			return false, errors.New("RPC returned inconsistent log")
 		}
 	}
-	b, err := i.Decoder.Decode(model.Block{Number: next, Hash: hash, ParentHash: h.ParentHash}, logs)
+	b, err := i.Decoder.Decode(model.Block{Number: next, Hash: hash, ParentHash: h.ParentHash, Timestamp: h.Time}, logs)
 	if err != nil {
 		return false, fmt.Errorf("decode block %d: %w", next, err)
 	}

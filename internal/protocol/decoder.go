@@ -94,7 +94,7 @@ func (d *Decoder) Decode(block model.Block, logs []types.Log) (batch model.Batch
 		e, eerr := d.abi.EventByID(l.Topics[0])
 		if eerr != nil {
 			raw, _ := json.Marshal(eventJSON(map[string]any{"topics": l.Topics, "data": l.Data}))
-			batch.Events = append(batch.Events, model.Event{Name: "Unknown", TransactionHash: l.TxHash, LogIndex: l.Index, Data: raw})
+			batch.Events = append(batch.Events, model.Event{Block: block, Name: "Unknown", TransactionHash: l.TxHash, LogIndex: l.Index, Data: raw})
 			continue
 		}
 		m := map[string]any{}
@@ -117,7 +117,7 @@ func (d *Decoder) Decode(block model.Block, logs []types.Log) (batch model.Batch
 		if eerr != nil {
 			return model.Batch{}, eerr
 		}
-		batch.Events = append(batch.Events, model.Event{Name: e.Name, TransactionHash: l.TxHash, LogIndex: l.Index, Data: raw})
+		batch.Events = append(batch.Events, model.Event{Block: block, Name: e.Name, TransactionHash: l.TxHash, LogIndex: l.Index, Data: raw})
 		events = append(events, decoded{l, e.Name, m})
 		if e.Name == "TreeCreated" {
 			id, x := tree(m["treeId"])
@@ -154,7 +154,7 @@ func (d *Decoder) Decode(block model.Block, logs []types.Log) (batch model.Batch
 			if actual, ok := inserted[location{l.TxHash, id, leaf}]; !ok || actual != c {
 				return fmt.Errorf("%s: output does not match transaction insertion", e.name)
 			}
-			batch.Outputs = append(batch.Outputs, model.Output{TreeID: id, LeafIndex: leaf, Commitment: c, Token: token, Ciphertext: append([]byte(nil), v.Ciphertext...), Clue: append([]byte(nil), v.Clue...), TransactionHash: l.TxHash, LogIndex: l.Index, Kind: e.name})
+			batch.Outputs = append(batch.Outputs, model.Output{Block: block, TreeID: id, LeafIndex: leaf, Commitment: c, Token: token, Ciphertext: append([]byte(nil), v.Ciphertext...), Clue: append([]byte(nil), v.Clue...), TransactionHash: l.TxHash, LogIndex: l.Index, Kind: e.name})
 			return nil
 		}
 		switch e.name {

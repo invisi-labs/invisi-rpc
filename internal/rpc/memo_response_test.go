@@ -13,7 +13,7 @@ func TestMemoUpdatesPreserveMaximumEnvelopes(t *testing.T) {
 	backend, anchor := anchor()
 	backend.outputs = make([]model.Output, 1000)
 	for i := range backend.outputs {
-		backend.outputs[i] = model.Output{Ciphertext: bytes.Repeat([]byte{4}, 658), Clue: bytes.Repeat([]byte{1}, 68)}
+		backend.outputs[i] = model.Output{Ciphertext: bytes.Repeat([]byte{5}, 754), Clue: bytes.Repeat([]byte{1}, 68)}
 	}
 	api, err := New(backend, model.Deployment{ChainID: "31337"}, 24, false, "1")
 	if err != nil {
@@ -40,7 +40,7 @@ func TestMemoUpdatesRejectOversizedResponse(t *testing.T) {
 	backend, anchor := anchor()
 	backend.outputs = make([]model.Output, 9999)
 	for i := range backend.outputs {
-		backend.outputs[i] = model.Output{Ciphertext: bytes.Repeat([]byte{4}, 658), Clue: bytes.Repeat([]byte{1}, 68)}
+		backend.outputs[i] = model.Output{Ciphertext: bytes.Repeat([]byte{5}, 754), Clue: bytes.Repeat([]byte{1}, 68)}
 	}
 	api, err := New(backend, model.Deployment{ChainID: "31337"}, 24, false, "1")
 	if err != nil {

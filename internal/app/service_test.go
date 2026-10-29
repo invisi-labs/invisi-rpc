@@ -304,7 +304,7 @@ func TestVerifySavedStateCanonicalCheckpointAndRoots(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first := model.Batch{Block: model.Block{Number: 10, Hash: firstHeader.Hash()}, CreatedTrees: []uint64{1}, Insertions: []model.Insertion{{TreeID: 1, Commitments: []common.Hash{common.HexToHash("0x1")}}}}
+	first := model.Batch{Block: model.Block{Number: 10, Timestamp: firstHeader.Time, Hash: firstHeader.Hash()}, CreatedTrees: []uint64{1}, Insertions: []model.Insertion{{TreeID: 1, Commitments: []common.Hash{common.HexToHash("0x1")}}}}
 	if err = store.Apply(context.Background(), first); err != nil {
 		t.Fatal(err)
 	}
@@ -312,7 +312,7 @@ func TestVerifySavedStateCanonicalCheckpointAndRoots(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	second := model.Batch{Block: model.Block{Number: 11, Hash: secondHeader.Hash(), ParentHash: first.Block.Hash}}
+	second := model.Batch{Block: model.Block{Number: 11, Timestamp: secondHeader.Time, Hash: secondHeader.Hash(), ParentHash: first.Block.Hash}}
 	if err = store.Apply(context.Background(), second); err != nil {
 		t.Fatal(err)
 	}

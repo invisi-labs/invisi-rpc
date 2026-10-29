@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -247,4 +248,44 @@ func TestReorgToShorterChain(t *testing.T) {
 	if cp.Number != 3 {
 		t.Fatalf("head not rewound: %+v", cp)
 	}
+}
+
+func TestConfirmedTimestampComesFromCanonicalHeader(t *testing.T) {
+	i, c, s, _ := fixture()
+	c.headers[2].Time = 2678400
+	c.headers[3].ParentHash = c.headers[2].Hash()
+	changed, err := i.Step(context.Background())
+	if err != nil || !changed {
+		t.Fatalf("step: %v %v", changed, err)
+	}
+	data, err := json.Marshal(s.applied[0].Block)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire map[string]any
+	if err = json.Unmarshal(data, &wire); err != nil {
+		t.Fatal(err)
+	}
+	if wire["timestamp"] != float64(c.headers[2].Time) {
+		t.Fatalf("canonical timestamp missing: %s", data)
+	}
+}
+
+func TestRejectSavedTimestampMismatchAndWrongHeaderHeight(t *testing.T) {
+	t.Run("saved timestamp", func(t *testing.T) {
+		i, c, s, _ := fixture()
+		saved := block(c.headers[2])
+		saved.Timestamp = 1
+		s.blocks[2] = saved
+		if _, err := i.Step(context.Background()); err == nil {
+			t.Fatal("accepted invented saved timestamp")
+		}
+	})
+	t.Run("wrong height", func(t *testing.T) {
+		i, c, _, _ := fixture()
+		c.headers[2] = c.headers[3]
+		if _, err := i.Step(context.Background()); err == nil {
+			t.Fatal("accepted wrong block header")
+		}
+	})
 }

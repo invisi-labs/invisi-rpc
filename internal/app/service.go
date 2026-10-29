@@ -262,8 +262,8 @@ func VerifySavedState(ctx context.Context, client *ethclient.Client, store stora
 	if err != nil {
 		return fmt.Errorf("Chain RPC cannot serve checkpoint height %d: %w", cp.Number, err)
 	}
-	if header.Hash() != cp.Hash {
-		return errors.New("saved checkpoint is not canonical")
+	if header.Hash() != cp.Hash || header.Time != cp.Timestamp {
+		return errors.New("saved checkpoint hash or timestamp is not canonical")
 	}
 	roots, err := storage.CurrentRootsAt(ctx, store, cp.Number)
 	if err != nil {

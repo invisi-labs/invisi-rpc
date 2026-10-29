@@ -23,8 +23,7 @@ import (
 
 const (
 	FormatVersion                     = 1
-	SourceProfile                     = "invisi-protocol-v1"
-	SourceCommit                      = "2e782a5ad53b355f73b619a943926286ffbb0766"
+	SourceProfile                     = "invisi-protocol-v1-credit-limits"
 	ABIHash                           = "d97d6eda53ea6e04772022dbeb9079d5e057d0aada6446aff4599424724fb51d"
 	DefaultMaxDecompressedBytes int64 = 8 << 30
 	MaxRecordBytes                    = 64 << 20
@@ -35,7 +34,6 @@ const (
 type Header struct {
 	Version       int              `json:"version"`
 	SourceProfile string           `json:"sourceProfile"`
-	SourceCommit  string           `json:"sourceCommit"`
 	ABIHash       string           `json:"abiSha256"`
 	Deployment    model.Deployment `json:"deployment"`
 	Checkpoint    *model.Block     `json:"checkpoint,omitempty"`
@@ -55,10 +53,10 @@ type Manifest struct {
 }
 
 func header(dep model.Deployment) Header {
-	return Header{Version: FormatVersion, SourceProfile: SourceProfile, SourceCommit: SourceCommit, ABIHash: ABIHash, Deployment: dep}
+	return Header{Version: FormatVersion, SourceProfile: SourceProfile, ABIHash: ABIHash, Deployment: dep}
 }
 func checkHeader(h Header, dep *model.Deployment) error {
-	if h.Version != FormatVersion || h.SourceProfile != SourceProfile || h.SourceCommit != SourceCommit || h.ABIHash != ABIHash {
+	if h.Version != FormatVersion || h.SourceProfile != SourceProfile || h.ABIHash != ABIHash {
 		return errors.New("unsupported snapshot version or source profile")
 	}
 	if h.Checkpoint != nil {
@@ -130,6 +128,7 @@ func Export(ctx context.Context, backend storage.Backend, dep model.Deployment, 
 		if e := checkBatch(dep, last, b.Block); e != nil {
 			return e
 		}
+		b.BindBlockContext()
 		if e := enc.Encode(record{Type: "block", Batch: &b}); e != nil {
 			return e
 		}

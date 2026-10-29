@@ -212,8 +212,9 @@ func TestHTTPDetectionRustVectorAndTransitions(t *testing.T) {
 	}{{"correct key", v.DetectionKey, true}, {"wrong key", v.OtherDetectionKey, false}} {
 		t.Run(tc.name, func(t *testing.T) {
 			f, rng := anchor()
-			f.outputs = []model.Output{{Commitment: common.HexToHash("01"), Clue: clue}, {Commitment: common.HexToHash("02"), Clue: []byte{0xff}}}
-			f.events = []model.Event{{Name: "Shield"}, {Name: "CreditDraw", Data: json.RawMessage(`{"params":{"remainderCommitments":[]}}`)}, {Name: "CreditCancelled"}}
+			f.head.Timestamp = 2678400
+			f.outputs = []model.Output{{Block: *f.head, Commitment: common.HexToHash("01"), Clue: clue}, {Block: *f.head, Commitment: common.HexToHash("02"), Clue: []byte{0xff}}}
+			f.events = []model.Event{{Name: "Shield"}, {Block: *f.head, Name: "CreditDraw", Data: json.RawMessage(`{"params":{"remainderCommitments":[]}}`)}, {Name: "CreditCancelled"}}
 			r := call(t, testServer(t, f, true), "invisi_detectOutputs", []any{rng, "0x" + tc.key}, "")
 			if r.Error != nil {
 				t.Fatal(r.Error)
@@ -230,6 +231,12 @@ func TestHTTPDetectionRustVectorAndTransitions(t *testing.T) {
 				t.Fatalf("unexpected detection %s", r.Result)
 			}
 			fallback := result.Candidates[len(result.Candidates)-1]
+			if fallback.Output.Block != *f.head {
+				t.Fatal("detection lost canonical block context")
+			}
+			if result.CreditTransitions[0].Block != *f.head {
+				t.Fatal("transition lost block context")
+			}
 			if !fallback.Fallback || fallback.Output.Commitment != f.outputs[1].Commitment {
 				t.Fatal("malformed clue was not preserved as fallback")
 			}
@@ -395,5 +402,37 @@ func TestDetectionCapacityReturnsRetryableRPCError(t *testing.T) {
 	}
 	if status := call(t, handler, "invisi_getStatus", []any{}, ""); status.Error != nil {
 		t.Fatal("detection overload blocked ordinary queries")
+	}
+}
+
+func TestCreditEndpointsPreserveConfirmedBlockContext(t *testing.T) {
+	f, rng := anchor()
+	b := *f.head
+	b.Timestamp = 2678400
+	f.events = []model.Event{{Block: b, Name: "CreditDraw", Data: json.RawMessage(`{"params":{"remainderCommitments":[]}}`)}}
+	f.outputs = []model.Output{{Block: b, Kind: "CreditDraw", Ciphertext: bytes.Repeat([]byte{5}, 754), Clue: []byte{255}}}
+	h := testServer(t, f, true)
+	for _, method := range []string{"invisi_getCreditTransitions", "invisi_getUpdates"} {
+		params := []any{rng}
+		r := call(t, h, method, params, "")
+		if r.Error != nil {
+			t.Fatalf("%s: %v", method, r.Error)
+		}
+		var transitions []model.Event
+		if method == "invisi_getUpdates" {
+			var u Updates
+			if err := json.Unmarshal(r.Result, &u); err != nil {
+				t.Fatal(err)
+			}
+			transitions = u.CreditTransitions
+			if len(u.Outputs) != 1 || u.Outputs[0].Block != b {
+				t.Fatalf("output block missing: %s", r.Result)
+			}
+		} else if err := json.Unmarshal(r.Result, &transitions); err != nil {
+			t.Fatal(err)
+		}
+		if len(transitions) != 1 || transitions[0].Block != b {
+			t.Fatalf("transition block missing: %s", r.Result)
+		}
 	}
 }

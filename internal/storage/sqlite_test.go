@@ -9,6 +9,7 @@ import (
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
 	"io"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -211,5 +212,70 @@ func TestSQLiteOptionsAndCancelledImport(t *testing.T) {
 	}
 	if _, e := OpenSQLite(ctx, ":memory:", model.Deployment{ChainID: "1"}); e == nil {
 		t.Fatal("nonpersistent database accepted")
+	}
+}
+
+func TestSQLiteCreditBlockContextRestartReorgAndFormatValidation(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "credit.sqlite")
+	dep := model.Deployment{ChainID: "97", FromBlock: 1}
+	s, err := OpenSQLite(ctx, path, dep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := model.Batch{Block: model.Block{Number: 1, Hash: common.HexToHash("1"), Timestamp: 2678400}, Events: []model.Event{{Name: "CreditDraw", Block: model.Block{Timestamp: 999}}}, Outputs: []model.Output{{Kind: "CreditDraw", Block: model.Block{Timestamp: 888}}}}
+	if err = s.Apply(ctx, original); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	s, err = OpenSQLite(ctx, path, dep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	check := func(want model.Block) {
+		t.Helper()
+		cp, e := s.Checkpoint(ctx)
+		if e != nil || *cp != want {
+			t.Fatalf("checkpoint %v %v", cp, e)
+		}
+		b, e := s.Block(ctx, 1)
+		if e != nil || *b != want {
+			t.Fatalf("block %v %v", b, e)
+		}
+		events, e := s.Events(ctx, 1, 1, 10)
+		if e != nil || len(events) != 1 || events[0].Block != want {
+			t.Fatalf("events %v %v", events, e)
+		}
+		outputs, e := s.Outputs(ctx, 1, 1, 10)
+		if e != nil || len(outputs) != 1 || outputs[0].Block != want {
+			t.Fatalf("outputs %v %v", outputs, e)
+		}
+	}
+	check(original.Block)
+	if err = s.Rollback(ctx, 0); err != nil {
+		t.Fatal(err)
+	}
+	replacement := original
+	replacement.Block.Hash = common.HexToHash("2")
+	replacement.Block.Timestamp = 2678401
+	if err = s.Apply(ctx, replacement); err != nil {
+		t.Fatal(err)
+	}
+	check(replacement.Block)
+	if _, err = s.pool.ExecContext(ctx, "UPDATE invisi_blocks SET batch=json_remove(batch, '$.block.timestamp') WHERE deployment=?1", s.key); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Checkpoint(ctx); err == nil {
+		t.Fatal("accepted current block record missing timestamp")
+	}
+	if _, err = s.pool.ExecContext(ctx, "UPDATE invisi_index_formats SET version=99 WHERE deployment=?1", s.key); err != nil {
+		t.Fatal(err)
+	}
+	if invalid, e := OpenSQLite(ctx, path, dep); e == nil {
+		invalid.Close()
+		t.Fatal("accepted corrupt current index format")
+	} else if !strings.Contains(e.Error(), "unsupported index format") {
+		t.Fatal(e)
 	}
 }
