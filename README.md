@@ -234,8 +234,8 @@ SQLite tests run by default. PostgreSQL/EVM tests explicitly skip without their 
 Versioned images are published to `ghcr.io/invisi-lab/invisi-protocol-rpc` for `linux/amd64` and `linux/arm64`:
 
 ```sh
-docker pull ghcr.io/invisi-lab/invisi-protocol-rpc:1.1.0
-docker run --rm ghcr.io/invisi-lab/invisi-protocol-rpc:1.1.0 --help
+docker pull ghcr.io/invisi-lab/invisi-protocol-rpc:1.1.1
+docker run --rm ghcr.io/invisi-lab/invisi-protocol-rpc:1.1.1 --help
 ```
 
 Pushing a stable `vMAJOR.MINOR.PATCH` tag runs Go tests and vet, then builds and publishes the corresponding image tag without the leading `v`. The **Publish container image** workflow also accepts an existing tag through its manual `tag` input. It compiles that tag's source with the workflow's Dockerfile, includes the Apache license, and records the source commit and image digest. Use the digest to pin an exact image in production. Images have their own visibility settings; public images support anonymous pulls even while the source repository is private.
