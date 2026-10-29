@@ -3,6 +3,7 @@ package rpc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"sync"
@@ -111,6 +112,21 @@ func (a *API) checkRange(ctx context.Context, r Range) error {
 	}
 	return nil
 }
+
+// Ranged responses reserve headroom below the transport's 16 MiB batch budget.
+const maxRangeResponseBytes = 8 << 20
+
+func checkResponseSize(value any) error {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	if len(encoded) > maxRangeResponseBytes {
+		return errors.New("range too large; query smaller ranges or getBlock")
+	}
+	return nil
+}
+
 func (a *API) GetEvents(ctx context.Context, r Range) ([]model.Event, error) {
 	if e := a.checkRange(ctx, r); e != nil {
 		return nil, e
@@ -121,6 +137,9 @@ func (a *API) GetEvents(ctx context.Context, r Range) ([]model.Event, error) {
 	}
 	if len(v) == 10000 {
 		return nil, errors.New("range too large; query smaller ranges or getBlock")
+	}
+	if e = checkResponseSize(v); e != nil {
+		return nil, e
 	}
 	if e = a.checkRange(ctx, r); e != nil {
 		return nil, e
@@ -152,7 +171,11 @@ func (a *API) GetUpdates(ctx context.Context, r Range) (*Updates, error) {
 	if e = a.checkRange(ctx, r); e != nil {
 		return nil, e
 	}
-	return &Updates{r.BlockHash, v, events}, nil
+	result := &Updates{r.BlockHash, v, events}
+	if e = checkResponseSize(result); e != nil {
+		return nil, e
+	}
+	return result, nil
 }
 func (a *API) GetCreditTransitions(ctx context.Context, r Range) ([]model.Event, error) {
 	events, e := a.GetEvents(ctx, r)

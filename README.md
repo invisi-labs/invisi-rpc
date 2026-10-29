@@ -197,7 +197,7 @@ The service accepts public requests. Optional API authentication and per-IP or p
 
 The example limits HTTP requests by IP or recognized key. It does not meter individual JSON-RPC batch calls or their computational cost. Its rate and connection values are illustrative deployment settings, not benchmark results.
 
-The backend independently limits requests to 1 MiB, batches to 20 calls and batch responses to 16 MiB. Query ranges and result limits still apply. `maxConcurrentRequests` defaults to 64 (allowed range 1–4096) across all chains on the listener. Exhausting this budget returns HTTP 429 with `Retry-After: 1`. Each chain also allows two concurrent FMD scans; exhausting that budget returns JSON-RPC error `-32005` with `data.retryAfterSeconds: 1`, including within an HTTP 200 batch response.
+The backend independently limits requests to 1 MiB, batches to 20 calls and batch responses to 16 MiB. Ranged event/update responses are limited to 8 MiB and return an explicit smaller-range error rather than partial data. Query ranges and result limits still apply. `maxConcurrentRequests` defaults to 64 (allowed range 1–4096) across all chains on the listener. Exhausting this budget returns HTTP 429 with `Retry-After: 1`. Each chain also allows two concurrent FMD scans; exhausting that budget returns JSON-RPC error `-32005` with `data.retryAfterSeconds: 1`, including within an HTTP 200 batch response.
 
 Clients should use bounded exponential backoff with jitter, respecting retry guidance. Authentication failures and invalid requests require correction rather than automatic retries.
 
@@ -213,7 +213,7 @@ Clients should use bounded exponential backoff with jitter, respecting retry gui
 | `internal/storage`, `internal/snapshot` | SQLite/PostgreSQL and portable bootstrap |
 | `internal/rpc` | HTTP queries, limits and detection |
 
-ABI pinned to `invisi-protocol@af770217a8cf4bd12fbf119455b4a51e16414bcb`. Crypto source references and independent Noir/Barretenberg/Rust vectors are retained. Go FMD uses variable-time arithmetic and has not been independently audited.
+The embedded ABI is synchronized with the current Protocol build; snapshot metadata pins its SHA-256 and Protocol v1 profile. Crypto source references and independent Noir/Barretenberg/Rust vectors are retained. Go FMD uses variable-time arithmetic and has not been independently audited.
 
 ```sh
 go test ./...
@@ -245,3 +245,5 @@ The Docker image contains no deployment catalog. Mount `invisi-protocol/deployme
 ### SDK deployment discovery
 
 Clients call `invisi_getDeployment` on `/v1/chains/<chainId>` before constructing their Protocol object. The response contains `apiVersion`, `protocolVersion` and `deployment`. Deployment fields are `chainId`, `protocol` and optional `registry`. Both contracts use `address`, `runtimeCodeHash` and `fromBlock`, represented by one shared contract deployment type. Set `registry` in the chain's `deployment.json` profile before `chain add`; they are copied into the initialized configuration. Existing initialized configurations can set these metadata fields in their deployment section while stopped. Public and private installations use the same interface. Deployment metadata identifies the service's selected pool; clients choose a trusted service or independently pin the deployment, then verify chain facts through Chain RPC.
+
+Encrypted output memos are opaque to this service. Funds envelopes use version 2 and 160–416 bytes; Credit envelopes use version 4 and 402–658 bytes. Both allow up to 256 encrypted memo bytes. Aggregate outputs frame each delivery as a two-byte big-endian ciphertext length, ciphertext, then a 68-byte FMD clue. The decoder validates framing and preserves each output's token, commitment and leaf position; wallet SDKs decrypt and interpret memo data.

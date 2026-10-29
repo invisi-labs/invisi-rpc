@@ -56,15 +56,14 @@ func TestShieldCorrelationAndInsertionBoundaries(t *testing.T) {
 func TestBatchOutputsPackedDeliveries(t *testing.T) {
 	d, log := fixture(t)
 	tx := common.Hash{}
-	p := make([]byte, 452)
-	p[158] = 9
-	p[226] = 7
+	p := append(memoSegment(160, 6), memoSegment(416, 7)...)
+	p[2+160] = 9
 	l := log("BatchOutputs", 1, tx, []any{big.NewInt(1)}, uint32(2), big.NewInt(0), []common.Address{{1}, {2}}, [][32]byte{{1}, {2}}, p)
 	b, err := d.Decode(model.Block{}, []types.Log{l})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(b.Insertions) != 1 || len(b.Outputs) != 2 || len(b.Outputs[0].Ciphertext) != 158 || b.Outputs[0].Clue[0] != 9 || b.Outputs[1].Ciphertext[0] != 7 {
+	if len(b.Insertions) != 1 || len(b.Outputs) != 2 || len(b.Outputs[0].Ciphertext) != 160 || b.Outputs[0].Clue[0] != 9 || b.Outputs[1].Ciphertext[1] != 7 {
 		t.Fatal("incorrect packed delivery split")
 	}
 	bad := log("BatchOutputs", 1, tx, []any{big.NewInt(1)}, uint32(2), big.NewInt(0), []common.Address{{1}}, [][32]byte{{1}, {2}}, p)

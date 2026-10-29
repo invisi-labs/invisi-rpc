@@ -1,9 +1,10 @@
-// Package protocol decodes the ABI pinned to contract commit af770217a8cf4bd12fbf119455b4a51e16414bcb.
+// Package protocol decodes events using the current built Protocol ABI.
 package protocol
 
 import (
 	"bytes"
 	_ "embed"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -165,13 +166,30 @@ func (d *Decoder) Decode(block model.Block, logs []types.Log) (batch model.Batch
 			cs := hashes(m["commitments"])
 			ts := m["tokens"].([]common.Address)
 			p := m["packedDeliveries"].([]byte)
-			if len(ts) != len(cs) || len(p) != 226*len(cs) {
+			if len(ts) != len(cs) {
 				return model.Batch{}, fmt.Errorf("BatchOutputs: array lengths differ")
 			}
+			cursor := 0
 			for i, c := range cs {
-				if err = add(id, m["startLeafIndex"].(uint32)+uint32(i), c, ts[i], delivery{p[226*i : 226*i+158], p[226*i+158 : 226*(i+1)]}); err != nil {
+				if len(p)-cursor < 2 {
+					return model.Batch{}, fmt.Errorf("BatchOutputs: truncated envelope length")
+				}
+				size := int(binary.BigEndian.Uint16(p[cursor : cursor+2]))
+				cursor += 2
+				if size < 160 || size > 416 || len(p)-cursor < size+68 {
+					return model.Batch{}, fmt.Errorf("BatchOutputs: invalid envelope length")
+				}
+				cipher, clue := p[cursor:cursor+size], p[cursor+size:cursor+size+68]
+				if cipher[0] != 2 || clue[64] != 24 {
+					return model.Batch{}, fmt.Errorf("BatchOutputs: invalid envelope version or clue precision")
+				}
+				cursor += size + 68
+				if err = add(id, m["startLeafIndex"].(uint32)+uint32(i), c, ts[i], delivery{cipher, clue}); err != nil {
 					return model.Batch{}, err
 				}
+			}
+			if cursor != len(p) {
+				return model.Batch{}, fmt.Errorf("BatchOutputs: trailing delivery bytes")
 			}
 		case "Shield":
 			id, x := tree(m["treeId"])

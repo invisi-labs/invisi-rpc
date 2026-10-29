@@ -24,8 +24,8 @@ import (
 const (
 	FormatVersion                     = 1
 	SourceProfile                     = "invisi-protocol-v1"
-	SourceCommit                      = "af770217a8cf4bd12fbf119455b4a51e16414bcb"
-	ABIHash                           = "00c392d7413878cffe0f745e02d4b4f1e853a76b248a251629307a5bdc5dd46a"
+	SourceCommit                      = "2e782a5ad53b355f73b619a943926286ffbb0766"
+	ABIHash                           = "d97d6eda53ea6e04772022dbeb9079d5e057d0aada6446aff4599424724fb51d"
 	DefaultMaxDecompressedBytes int64 = 8 << 30
 	MaxRecordBytes                    = 64 << 20
 )
