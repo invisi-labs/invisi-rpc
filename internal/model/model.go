@@ -73,14 +73,31 @@ type Event struct {
 	LogIndex        uint            `json:"logIndex"`
 	Data            json.RawMessage `json:"data"`
 }
+type RegistrationUpdate struct {
+	WalletIdentity   common.Address `json:"walletIdentity"`
+	ViewingPublicKey hexutil.Bytes  `json:"viewingPublicKey"`
+	ClueKey          common.Hash    `json:"clueKey"`
+	Nonce            uint64         `json:"nonce,string"`
+	LogIndex         uint           `json:"logIndex"`
+}
+
+// RegisteredReceivingAddress reflects keys through the returned indexed block.
+type RegisteredReceivingAddress struct {
+	WalletIdentity   common.Address `json:"walletIdentity"`
+	ViewingPublicKey hexutil.Bytes  `json:"viewingPublicKey"`
+	ClueKey          common.Hash    `json:"clueKey"`
+	Nonce            uint64         `json:"nonce,string"`
+	Block            Block          `json:"block"`
+}
 type Batch struct {
-	Block        Block         `json:"block"`
-	Logs         []types.Log   `json:"logs"`
-	Events       []Event       `json:"events"`
-	CreatedTrees []uint64      `json:"createdTrees"`
-	Insertions   []Insertion   `json:"insertions"`
-	Outputs      []Output      `json:"outputs"`
-	Nullifiers   []common.Hash `json:"nullifiers"`
+	Registrations []RegistrationUpdate `json:"registrations,omitempty"`
+	Block         Block                `json:"block"`
+	Logs          []types.Log          `json:"logs"`
+	Events        []Event              `json:"events"`
+	CreatedTrees  []uint64             `json:"createdTrees"`
+	Insertions    []Insertion          `json:"insertions"`
+	Outputs       []Output             `json:"outputs"`
+	Nullifiers    []common.Hash        `json:"nullifiers"`
 }
 type Root struct {
 	TreeID    uint64      `json:"treeId"`

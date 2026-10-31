@@ -289,3 +289,23 @@ func TestRejectSavedTimestampMismatchAndWrongHeaderHeight(t *testing.T) {
 		}
 	})
 }
+
+func TestRegistryEarlierStartAndEmitterFilter(t *testing.T) {
+	i, c, s, _ := fixture()
+	i.Deployment.Registry = &model.ContractDeployment{Address: common.HexToAddress("0x5678"), RuntimeCodeHash: crypto.Keccak256Hash(c.code), FromBlock: 1}
+	if err := i.Verify(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := i.Step(context.Background()); err != nil || !ok {
+		t.Fatalf("step: %v %v", ok, err)
+	}
+	if len(s.applied) != 1 || s.applied[0].Block.Number != 1 || len(c.queries[0].Addresses) != 1 || c.queries[0].Addresses[0] != i.Deployment.Registry.Address {
+		t.Fatal("registry history was not indexed before Protocol deployment")
+	}
+	if ok, err := i.Step(context.Background()); err != nil || !ok {
+		t.Fatalf("step: %v %v", ok, err)
+	}
+	if len(c.queries[1].Addresses) != 2 {
+		t.Fatal("expected both emitting contracts")
+	}
+}

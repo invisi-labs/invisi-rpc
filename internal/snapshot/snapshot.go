@@ -15,6 +15,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
@@ -23,8 +24,8 @@ import (
 
 const (
 	FormatVersion                     = 1
-	SourceProfile                     = "invisi-protocol-v1-credit-limits"
-	ABIHash                           = "d97d6eda53ea6e04772022dbeb9079d5e057d0aada6446aff4599424724fb51d"
+	SourceProfile                     = "invisi-protocol-v1-registry-events"
+	ABIHash                           = "d0363077986ff88b5aee189f1931a2286d7ec3e8d7b7e5208b05807be3b0d3c9"
 	DefaultMaxDecompressedBytes int64 = 8 << 30
 	MaxRecordBytes                    = 64 << 20
 )
@@ -62,15 +63,15 @@ func checkHeader(h Header, dep *model.Deployment) error {
 	if h.Checkpoint != nil {
 		return errors.New("checkpoint belongs in snapshot footer")
 	}
-	// The independent registry does not change indexed pool identity.
-	if dep != nil && (h.Deployment.ChainID != dep.ChainID || h.Deployment.Protocol != dep.Protocol || h.Deployment.FromBlock != dep.FromBlock || h.Deployment.RuntimeCodeHash != dep.RuntimeCodeHash) {
+	// Both event sources bind indexed history and derived registry state.
+	if dep != nil && (h.Deployment.ChainID != dep.ChainID || h.Deployment.Protocol != dep.Protocol || h.Deployment.FromBlock != dep.FromBlock || h.Deployment.RuntimeCodeHash != dep.RuntimeCodeHash || !reflect.DeepEqual(h.Deployment.Registry, dep.Registry)) {
 		return errors.New("snapshot deployment differs from configured chain, protocol, runtime code hash, or start block")
 	}
 	return nil
 }
 func checkBatch(dep model.Deployment, last *model.Block, b model.Block) error {
 	if last == nil {
-		if b.Number != dep.FromBlock {
+		if b.Number != dep.IndexFromBlock() {
 			return errors.New("snapshot does not begin at deployment start block")
 		}
 	} else {

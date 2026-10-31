@@ -22,6 +22,7 @@ type Backend interface {
 	Events(context.Context, uint64, uint64, int) ([]model.Event, error)
 	Outputs(context.Context, uint64, uint64, int) ([]model.Output, error)
 	IsSpent(context.Context, common.Hash) (bool, error)
+	ReceivingAddress(context.Context, common.Address) (*model.RegisteredReceivingAddress, error)
 	Import(context.Context, func() (model.Batch, error)) error
 	Export(context.Context, func(model.Batch) error) (*model.Block, error)
 }

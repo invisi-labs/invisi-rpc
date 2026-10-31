@@ -66,13 +66,24 @@ func Open(ctx context.Context, url string, deployment model.Deployment) (*Store,
 		}
 	}
 	if err == nil {
-		_, err = tx.Exec(ctx, "INSERT INTO invisi_index_formats VALUES($1,1) ON CONFLICT DO NOTHING", s.key)
+		profile, _ := json.Marshal(deployment.Registry)
+		_, err = tx.Exec(ctx, "INSERT INTO invisi_registry_profiles VALUES($1,$2) ON CONFLICT DO NOTHING", s.key, string(profile))
+		if err == nil {
+			var saved string
+			err = tx.QueryRow(ctx, "SELECT profile FROM invisi_registry_profiles WHERE deployment=$1", s.key).Scan(&saved)
+			if err == nil && saved != string(profile) {
+				err = errors.New("registry deployment differs from persisted configuration")
+			}
+		}
+	}
+	if err == nil {
+		_, err = tx.Exec(ctx, "INSERT INTO invisi_index_formats VALUES($1,2) ON CONFLICT DO NOTHING", s.key)
 	}
 	if err == nil {
 		var version int
 		err = tx.QueryRow(ctx, "SELECT version FROM invisi_index_formats WHERE deployment=$1", s.key).Scan(&version)
-		if err == nil && version != 1 {
-			err = errors.New("unsupported index format")
+		if err == nil && version != 2 {
+			err = errors.New("unsupported index format; use a fresh database and rebuild the event index")
 		}
 	}
 	if err == nil {
@@ -189,8 +200,8 @@ func (s *Store) apply(ctx context.Context, tx pgx.Tx, b model.Batch) error {
 		return err
 	}
 	if head == nil {
-		if b.Block.Number != s.deployment.FromBlock {
-			return fmt.Errorf("first block must be %d", s.deployment.FromBlock)
+		if b.Block.Number != s.deployment.IndexFromBlock() {
+			return fmt.Errorf("first block must be %d", s.deployment.IndexFromBlock())
 		}
 	} else if b.Block.Number != head.Number+1 || b.Block.ParentHash != head.Hash {
 		return errors.New("block gap or parent hash mismatch")
@@ -202,6 +213,21 @@ func (s *Store) apply(ctx context.Context, tx pgx.Tx, b model.Batch) error {
 	}
 	if _, err = tx.Exec(ctx, "INSERT INTO invisi_blocks VALUES($1,$2,$3,$4,$5)", s.key, b.Block.Number, b.Block.Hash[:], b.Block.ParentHash[:], raw); err != nil {
 		return err
+	}
+	for _, registration := range b.Registrations {
+		raw, err := json.Marshal(registration)
+		if err != nil {
+			return err
+		}
+		if s.deployment.Registry == nil {
+			return errors.New("registry event without configured registry")
+		}
+		if b.Block.Number < s.deployment.Registry.FromBlock {
+			return errors.New("registry event predates deployment")
+		}
+		if _, err = tx.Exec(ctx, "INSERT INTO invisi_registrations VALUES($1,$2,$3,$4,$5)", s.key, registration.WalletIdentity[:], b.Block.Number, registration.LogIndex, raw); err != nil {
+			return err
+		}
 	}
 	for _, id := range b.CreatedTrees {
 		if id > math.MaxInt64 {
@@ -552,4 +578,40 @@ func (s *Store) IsSpent(ctx context.Context, hash common.Hash) (bool, error) {
 	var spent bool
 	err := s.pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM invisi_nullifiers WHERE deployment=$1 AND hash=$2)", s.key, hash[:]).Scan(&spent)
 	return spent, err
+}
+
+// ReceivingAddress reads the latest registration and indexed head in one database snapshot.
+func (s *Store) ReceivingAddress(ctx context.Context, owner common.Address) (*model.RegisteredReceivingAddress, error) {
+	var blockRaw, registrationRaw []byte
+	err := s.pool.QueryRow(ctx, `SELECT head.block,r.registration FROM
+ (SELECT batch->'block' AS block FROM invisi_blocks WHERE deployment=$1 ORDER BY number DESC LIMIT 1) head
+ LEFT JOIN invisi_registrations r ON r.deployment=$1 AND r.owner=$2
+ ORDER BY r.block_number DESC,r.log_index DESC LIMIT 1`, s.key, owner[:]).Scan(&blockRaw, &registrationRaw)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, errors.New("registry index has not reached its first block")
+	}
+	if err != nil {
+		return nil, err
+	}
+	var block model.Block
+	if err = json.Unmarshal(blockRaw, &block); err != nil {
+		return nil, err
+	}
+	if s.deployment.Registry == nil || block.Number < s.deployment.Registry.FromBlock {
+		return nil, errors.New("registry index has not reached registry deployment")
+	}
+	if len(registrationRaw) == 0 {
+		return nil, nil
+	}
+	var registration model.RegistrationUpdate
+	if err = json.Unmarshal(registrationRaw, &registration); err != nil {
+		return nil, err
+	}
+	return &model.RegisteredReceivingAddress{
+		WalletIdentity:   registration.WalletIdentity,
+		ViewingPublicKey: registration.ViewingPublicKey,
+		ClueKey:          registration.ClueKey,
+		Nonce:            registration.Nonce,
+		Block:            block,
+	}, nil
 }

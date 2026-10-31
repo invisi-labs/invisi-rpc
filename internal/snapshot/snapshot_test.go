@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math/big"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -326,7 +327,11 @@ func TestPinnedABIHashMatchesSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sum := sha256.Sum256(b)
+	registry, err := os.ReadFile("../protocol/InvisiAddressRegistry.abi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(append(b, registry...))
 	if hex.EncodeToString(sum[:]) != ABIHash {
 		t.Fatal("snapshot ABI hash differs from pinned decoder ABI")
 	}
@@ -573,5 +578,53 @@ func TestHeaderDoesNotBindSourceCommit(t *testing.T) {
 		if err := checkHeader(changed, &dep); err == nil {
 			t.Fatalf("accepted incompatible %s", kind)
 		}
+	}
+}
+
+func TestRegistrySnapshotRoundTripAndPins(t *testing.T) {
+	ctx := context.Background()
+	dep := model.Deployment{ChainID: "97", Protocol: common.HexToAddress("0x1"), FromBlock: 10, Registry: &model.ContractDeployment{Address: common.HexToAddress("0x2"), RuntimeCodeHash: common.HexToHash("0x3"), FromBlock: 8}}
+	source, err := storage.OpenSQLite(ctx, filepath.Join(t.TempDir(), "source.db"), dep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer source.Close()
+	owner := common.HexToAddress("0x1234")
+	for n := uint64(8); n <= 10; n++ {
+		b := model.Batch{Block: model.Block{Number: n, Hash: common.BigToHash(new(big.Int).SetUint64(n)), ParentHash: common.BigToHash(new(big.Int).SetUint64(n - 1))}}
+		if n == 8 || n == 10 {
+			b.Registrations = []model.RegistrationUpdate{{WalletIdentity: owner, ViewingPublicKey: []byte{2}, ClueKey: common.HexToHash("0x1"), Nonce: n, LogIndex: 1}}
+		}
+		if err = source.Apply(ctx, b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	path, err := Export(ctx, source, dep, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	destination, err := storage.OpenSQLite(ctx, filepath.Join(t.TempDir(), "destination.db"), dep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer destination.Close()
+	if err = Restore(ctx, destination, dep, path, fileHash(t, path)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := destination.ReceivingAddress(ctx, owner)
+	if err != nil || got == nil || got.Nonce != 10 {
+		t.Fatalf("restored: %+v %v", got, err)
+	}
+	if err = destination.Rollback(ctx, 9); err != nil {
+		t.Fatal(err)
+	}
+	got, err = destination.ReceivingAddress(ctx, owner)
+	if err != nil || got == nil || got.Nonce != 8 {
+		t.Fatalf("restored rollback: %+v %v", got, err)
+	}
+	changed := dep
+	changed.Registry = &model.ContractDeployment{Address: common.HexToAddress("0x4"), RuntimeCodeHash: dep.Registry.RuntimeCodeHash, FromBlock: 8}
+	if err = Restore(ctx, destination, changed, path, fileHash(t, path)); err == nil {
+		t.Fatal("accepted mismatched registry")
 	}
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/config"
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/indexer"
+	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/protocol"
 	apirpc "github.com/invisi-lab/invisi-protocol-rpc/internal/rpc"
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/snapshot"
@@ -35,7 +36,7 @@ func CheckAvailability(ctx context.Context, client *ethclient.Client, store stor
 	if err != nil {
 		return fmt.Errorf("Chain RPC cannot provide latest height: %w", err)
 	}
-	required := c.Deployment.FromBlock
+	required := c.Deployment.IndexFromBlock()
 	if cp != nil {
 		if cp.Number > head.Number.Uint64() {
 			return fmt.Errorf("Chain RPC latest height %d is behind saved checkpoint height %d", head.Number.Uint64(), cp.Number)
@@ -60,12 +61,22 @@ func CheckAvailability(ctx context.Context, client *ethclient.Client, store stor
 		return fmt.Errorf("Chain RPC cannot serve logs at required height %d: %w", required, err)
 	}
 	// Root validation requires state at each indexed height, not merely header retention.
-	code, err := client.CodeAt(ctx, c.Deployment.Protocol, new(big.Int).SetUint64(required))
-	if err != nil {
-		return fmt.Errorf("Chain RPC cannot serve historical state at required height %d: %w", required, err)
+	contracts := []model.ContractDeployment{{Address: c.Deployment.Protocol, RuntimeCodeHash: c.Deployment.RuntimeCodeHash, FromBlock: c.Deployment.FromBlock}}
+	if c.Deployment.Registry != nil {
+		contracts = append(contracts, *c.Deployment.Registry)
 	}
-	if len(code) == 0 || crypto.Keccak256Hash(code) != c.Deployment.RuntimeCodeHash {
-		return fmt.Errorf("protocol runtime code mismatch at required block height %d", required)
+	for _, contract := range contracts {
+		height := required
+		if height < contract.FromBlock {
+			height = contract.FromBlock
+		}
+		code, err := client.CodeAt(ctx, contract.Address, new(big.Int).SetUint64(height))
+		if err != nil {
+			return fmt.Errorf("Chain RPC cannot serve historical state at required height %d: %w", height, err)
+		}
+		if len(code) == 0 || crypto.Keccak256Hash(code) != contract.RuntimeCodeHash {
+			return fmt.Errorf("contract runtime code mismatch at required block height %d", height)
+		}
 	}
 	return nil
 }
@@ -107,7 +118,7 @@ func prepareChain(ctx context.Context, c config.Chain, reconcile bool) (runtime 
 	if err != nil {
 		return nil, err
 	}
-	decoder, err := protocol.NewDecoder()
+	decoder, err := protocol.NewDeploymentDecoder(c.Deployment)
 	if err != nil {
 		return nil, err
 	}

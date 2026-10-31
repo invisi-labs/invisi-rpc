@@ -108,13 +108,24 @@ func OpenSQLite(ctx context.Context, path string, d model.Deployment) (*SQLiteSt
 		}
 	}
 	if e == nil {
-		_, e = tx.Exec(ctx, "INSERT INTO invisi_index_formats VALUES(?1,1) ON CONFLICT DO NOTHING", s.key)
+		profile, _ := json.Marshal(d.Registry)
+		_, e = tx.Exec(ctx, "INSERT INTO invisi_registry_profiles VALUES(?1,?2) ON CONFLICT DO NOTHING", s.key, string(profile))
+		if e == nil {
+			var saved string
+			e = tx.QueryRow(ctx, "SELECT profile FROM invisi_registry_profiles WHERE deployment=?1", s.key).Scan(&saved)
+			if e == nil && saved != string(profile) {
+				e = errors.New("registry deployment differs from persisted configuration")
+			}
+		}
+	}
+	if e == nil {
+		_, e = tx.Exec(ctx, "INSERT INTO invisi_index_formats VALUES(?1,2) ON CONFLICT DO NOTHING", s.key)
 	}
 	if e == nil {
 		var version int
 		e = tx.QueryRow(ctx, "SELECT version FROM invisi_index_formats WHERE deployment=?1", s.key).Scan(&version)
-		if e == nil && version != 1 {
-			e = errors.New("unsupported index format")
+		if e == nil && version != 2 {
+			e = errors.New("unsupported index format; use a fresh database and rebuild the event index")
 		}
 	}
 	if e == nil {
@@ -128,7 +139,13 @@ func OpenSQLite(ctx context.Context, path string, d model.Deployment) (*SQLiteSt
 	return s, nil
 }
 
-const sqliteSchema = `CREATE TABLE IF NOT EXISTS invisi_blocks (
+const sqliteSchema = `
+CREATE TABLE IF NOT EXISTS invisi_registrations (
+ deployment text NOT NULL, owner BLOB NOT NULL, block_number bigint NOT NULL, log_index bigint NOT NULL, registration TEXT NOT NULL,
+ PRIMARY KEY(deployment,owner,block_number,log_index), FOREIGN KEY(deployment,block_number) REFERENCES invisi_blocks ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS invisi_registry_profiles (deployment text PRIMARY KEY, profile text NOT NULL);
+CREATE TABLE IF NOT EXISTS invisi_blocks (
  deployment TEXT NOT NULL, number INTEGER NOT NULL, hash BLOB NOT NULL, parent_hash BLOB NOT NULL, batch TEXT NOT NULL,
  PRIMARY KEY(deployment,number)
 );
@@ -250,8 +267,8 @@ func (s *SQLiteStore) apply(ctx context.Context, tx *sqliteTx, b model.Batch) er
 		return err
 	}
 	if head == nil {
-		if b.Block.Number != s.deployment.FromBlock {
-			return fmt.Errorf("first block must be %d", s.deployment.FromBlock)
+		if b.Block.Number != s.deployment.IndexFromBlock() {
+			return fmt.Errorf("first block must be %d", s.deployment.IndexFromBlock())
 		}
 	} else if b.Block.Number != head.Number+1 || b.Block.ParentHash != head.Hash {
 		return errors.New("block gap or parent hash mismatch")
@@ -263,6 +280,21 @@ func (s *SQLiteStore) apply(ctx context.Context, tx *sqliteTx, b model.Batch) er
 	}
 	if _, err = tx.Exec(ctx, "INSERT INTO invisi_blocks VALUES(?1,?2,?3,?4,?5)", s.key, b.Block.Number, b.Block.Hash[:], b.Block.ParentHash[:], raw); err != nil {
 		return err
+	}
+	for _, registration := range b.Registrations {
+		raw, err := json.Marshal(registration)
+		if err != nil {
+			return err
+		}
+		if s.deployment.Registry == nil {
+			return errors.New("registry event without configured registry")
+		}
+		if b.Block.Number < s.deployment.Registry.FromBlock {
+			return errors.New("registry event predates deployment")
+		}
+		if _, err = tx.Exec(ctx, "INSERT INTO invisi_registrations VALUES(?1,?2,?3,?4,?5)", s.key, registration.WalletIdentity[:], b.Block.Number, registration.LogIndex, raw); err != nil {
+			return err
+		}
 	}
 	for _, id := range b.CreatedTrees {
 		if id > math.MaxInt64 {
@@ -621,4 +653,40 @@ func (s *SQLiteStore) Export(ctx context.Context, consume func(model.Batch) erro
 		return nil, err
 	}
 	return head, nil
+}
+
+// ReceivingAddress reads the latest registration and indexed head in one database snapshot.
+func (s *SQLiteStore) ReceivingAddress(ctx context.Context, owner common.Address) (*model.RegisteredReceivingAddress, error) {
+	var blockRaw, registrationRaw []byte
+	err := s.readPool.QueryRow(ctx, `SELECT head.block,r.registration FROM
+ (SELECT json_extract(batch,'$.block') AS block FROM invisi_blocks WHERE deployment=?1 ORDER BY number DESC LIMIT 1) head
+ LEFT JOIN invisi_registrations r ON r.deployment=?1 AND r.owner=?2
+ ORDER BY r.block_number DESC,r.log_index DESC LIMIT 1`, s.key, owner[:]).Scan(&blockRaw, &registrationRaw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, errors.New("registry index has not reached its first block")
+	}
+	if err != nil {
+		return nil, err
+	}
+	var block model.Block
+	if err = json.Unmarshal(blockRaw, &block); err != nil {
+		return nil, err
+	}
+	if s.deployment.Registry == nil || block.Number < s.deployment.Registry.FromBlock {
+		return nil, errors.New("registry index has not reached registry deployment")
+	}
+	if len(registrationRaw) == 0 {
+		return nil, nil
+	}
+	var registration model.RegistrationUpdate
+	if err = json.Unmarshal(registrationRaw, &registration); err != nil {
+		return nil, err
+	}
+	return &model.RegisteredReceivingAddress{
+		WalletIdentity:   registration.WalletIdentity,
+		ViewingPublicKey: registration.ViewingPublicKey,
+		ClueKey:          registration.ClueKey,
+		Nonce:            registration.Nonce,
+		Block:            block,
+	}, nil
 }

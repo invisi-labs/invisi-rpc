@@ -48,3 +48,12 @@ func (d *Deployment) UnmarshalJSON(data []byte) error {
 	*d = Deployment{ChainID: value.ChainID, Protocol: value.Protocol.Address, RuntimeCodeHash: value.Protocol.RuntimeCodeHash, FromBlock: value.Protocol.FromBlock, Registry: value.Registry}
 	return nil
 }
+
+// IndexFromBlock covers both independently deployed event sources.
+func (d Deployment) IndexFromBlock() uint64 {
+	start := d.FromBlock
+	if d.Registry != nil && d.Registry.FromBlock < start {
+		start = d.Registry.FromBlock
+	}
+	return start
+}

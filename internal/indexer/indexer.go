@@ -51,7 +51,19 @@ func (i *Indexer) Verify(ctx context.Context) error {
 	if len(code) == 0 || crypto.Keccak256Hash(code) != i.Deployment.RuntimeCodeHash {
 		return errors.New("protocol runtime code hash mismatch")
 	}
+	if i.Deployment.Registry != nil {
+		code, err = i.Chain.CodeAt(ctx, i.Deployment.Registry.Address, nil)
+		if err != nil {
+			return err
+		}
+		if len(code) == 0 || crypto.Keccak256Hash(code) != i.Deployment.Registry.RuntimeCodeHash {
+			return errors.New("registry runtime code hash mismatch")
+		}
+	}
 	return nil
+}
+func allowedEmitter(d model.Deployment, address common.Address, number uint64) bool {
+	return (address == d.Protocol && number >= d.FromBlock) || (d.Registry != nil && address == d.Registry.Address && number >= d.Registry.FromBlock)
 }
 
 // Step processes at most one confirmed block. A false result means the indexer is caught up.
@@ -67,7 +79,7 @@ func (i *Indexer) Step(ctx context.Context) (bool, error) {
 	// Reconcile even when no new confirmed blocks are available.
 	for cp != nil {
 		if cp.Number > head.Number.Uint64() {
-			if cp.Number <= i.Deployment.FromBlock {
+			if cp.Number <= i.Deployment.IndexFromBlock() {
 				return false, errors.New("chain head precedes deployment; verify deployment before reset")
 			}
 			if err = i.Store.Rollback(ctx, cp.Number-1); err != nil {
@@ -89,7 +101,7 @@ func (i *Indexer) Step(ctx context.Context) (bool, error) {
 			}
 			break
 		}
-		if cp.Number == i.Deployment.FromBlock {
+		if cp.Number == i.Deployment.IndexFromBlock() {
 			return false, errors.New("deployment starting block was reorganized; reset database after verifying deployment")
 		}
 		ancestor := cp.Number - 1
@@ -101,7 +113,7 @@ func (i *Indexer) Step(ctx context.Context) (bool, error) {
 			return false, err
 		}
 	}
-	next := i.Deployment.FromBlock
+	next := i.Deployment.IndexFromBlock()
 	if cp != nil {
 		next = cp.Number + 1
 	}
@@ -119,12 +131,19 @@ func (i *Indexer) Step(ctx context.Context) (bool, error) {
 		return false, errors.New("chain changed during indexing; retry")
 	}
 	hash := h.Hash()
-	logs, err := i.Chain.FilterLogs(ctx, ethereum.FilterQuery{BlockHash: &hash, Addresses: []common.Address{i.Deployment.Protocol}})
+	addresses := []common.Address{}
+	if next >= i.Deployment.FromBlock {
+		addresses = append(addresses, i.Deployment.Protocol)
+	}
+	if i.Deployment.Registry != nil && next >= i.Deployment.Registry.FromBlock {
+		addresses = append(addresses, i.Deployment.Registry.Address)
+	}
+	logs, err := i.Chain.FilterLogs(ctx, ethereum.FilterQuery{BlockHash: &hash, Addresses: addresses})
 	if err != nil {
 		return false, err
 	}
 	for _, l := range logs {
-		if l.BlockHash != hash || l.BlockNumber != next || l.Address != i.Deployment.Protocol || l.Removed {
+		if l.BlockHash != hash || l.BlockNumber != next || !allowedEmitter(i.Deployment, l.Address, next) || l.Removed {
 			return false, errors.New("RPC returned inconsistent log")
 		}
 	}

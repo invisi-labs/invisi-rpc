@@ -8,6 +8,7 @@ import (
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/cryptography"
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
 	"io"
+	"math/big"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -277,5 +278,92 @@ func TestSQLiteCreditBlockContextRestartReorgAndFormatValidation(t *testing.T) {
 		t.Fatal("accepted corrupt current index format")
 	} else if !strings.Contains(e.Error(), "unsupported index format") {
 		t.Fatal(e)
+	}
+}
+
+func TestSQLiteRegistryHistory(t *testing.T) {
+	ctx := context.Background()
+	dep := model.Deployment{ChainID: "97", Protocol: common.HexToAddress("0x1"), FromBlock: 10, Registry: &model.ContractDeployment{Address: common.HexToAddress("0x2"), RuntimeCodeHash: common.HexToHash("0x3"), FromBlock: 8}}
+	path := filepath.Join(t.TempDir(), "registry.db")
+	s, err := OpenSQLite(ctx, path, dep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner := common.HexToAddress("0x1234")
+	if _, err = s.ReceivingAddress(ctx, owner); err == nil {
+		t.Fatal("empty index must not claim unregistered")
+	}
+	for n := uint64(8); n <= 11; n++ {
+		b := model.Batch{Block: model.Block{Number: n, Hash: common.BigToHash(new(big.Int).SetUint64(n)), ParentHash: common.BigToHash(new(big.Int).SetUint64(n - 1))}}
+		if n == 8 || n == 10 {
+			b.Registrations = []model.RegistrationUpdate{{WalletIdentity: owner, ViewingPublicKey: []byte{2}, ClueKey: common.HexToHash("0x1"), Nonce: n, LogIndex: 1}}
+		}
+		if n == 10 {
+			b.Registrations = append(b.Registrations, model.RegistrationUpdate{WalletIdentity: owner, ViewingPublicKey: []byte{3}, ClueKey: common.HexToHash("0x2"), Nonce: 18446744073709551615, LogIndex: 2})
+		}
+		if err = s.Apply(ctx, b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := s.ReceivingAddress(ctx, owner)
+	if err != nil || got == nil || got.Nonce != 18446744073709551615 || got.Block.Number != 11 || got.ViewingPublicKey[0] != 3 {
+		t.Fatalf("latest: %+v %v", got, err)
+	}
+	if err = s.Rollback(ctx, 9); err != nil {
+		t.Fatal(err)
+	}
+	got, err = s.ReceivingAddress(ctx, owner)
+	if err != nil || got == nil || got.Nonce != 8 || got.Block.Number != 9 {
+		t.Fatalf("rollback: %+v %v", got, err)
+	}
+	s.Close()
+	s, err = OpenSQLite(ctx, path, dep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	got, err = s.ReceivingAddress(ctx, owner)
+	if err != nil || got == nil || got.Nonce != 8 {
+		t.Fatalf("restart: %+v %v", got, err)
+	}
+	got, err = s.ReceivingAddress(ctx, common.HexToAddress("0x5678"))
+	if err != nil || got != nil {
+		t.Fatalf("unregistered: %+v %v", got, err)
+	}
+}
+
+func TestSQLiteRegistryCoverageAndProfile(t *testing.T) {
+	ctx := context.Background()
+	dep := model.Deployment{ChainID: "97", Protocol: common.HexToAddress("0x1"), FromBlock: 8, Registry: &model.ContractDeployment{Address: common.HexToAddress("0x2"), RuntimeCodeHash: common.HexToHash("0x3"), FromBlock: 10}}
+	path := filepath.Join(t.TempDir(), "registry.db")
+	s, err := OpenSQLite(ctx, path, dep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Apply(ctx, model.Batch{Block: model.Block{Number: 8, Hash: common.HexToHash("0x8")}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.ReceivingAddress(ctx, common.HexToAddress("0x1234")); err == nil {
+		t.Fatal("claimed unregistered before registry deployment")
+	}
+	s.Close()
+	changed := dep
+	changed.Registry = &model.ContractDeployment{Address: common.HexToAddress("0x4"), RuntimeCodeHash: dep.Registry.RuntimeCodeHash, FromBlock: 10}
+	if reopened, err := OpenSQLite(ctx, path, changed); err == nil {
+		reopened.Close()
+		t.Fatal("accepted changed registry profile")
+	}
+	s, err = OpenSQLite(ctx, path, dep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.pool.ExecContext(ctx, "UPDATE invisi_index_formats SET version=1 WHERE deployment=?1", s.key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	if reopened, err := OpenSQLite(ctx, path, dep); err == nil {
+		reopened.Close()
+		t.Fatal("accepted incomplete old registry index")
 	}
 }

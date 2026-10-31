@@ -26,3 +26,9 @@ CREATE TABLE IF NOT EXISTS invisi_deployments (
 );
 
 CREATE TABLE IF NOT EXISTS invisi_index_formats (deployment text PRIMARY KEY, version integer NOT NULL);
+
+CREATE TABLE IF NOT EXISTS invisi_registrations (
+ deployment text NOT NULL, owner bytea NOT NULL, block_number bigint NOT NULL, log_index bigint NOT NULL, registration jsonb NOT NULL,
+ PRIMARY KEY(deployment,owner,block_number,log_index), FOREIGN KEY(deployment,block_number) REFERENCES invisi_blocks ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS invisi_registry_profiles (deployment text PRIMARY KEY, profile text NOT NULL);

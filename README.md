@@ -166,6 +166,7 @@ POST JSON-RPC 2.0 to `/v1/chains/<chainId>` using positional parameter arrays. `
 | `invisi_getEvents` | `[range]` | Events in canonical log order |
 | `invisi_getRoots` | `[treeId]` | Up to 10,000 recent recorded roots, newest first |
 | `invisi_getMembership` | `[treeId, leafIndex, root]` | Commitment, 16 siblings and historical anchor |
+| `invisi_getReceivingAddress` | `[ownerAddress]` | Indexed registered public keys and nonce with the indexed block reference; `null` if unregistered |
 | `invisi_isSpent` | `[nullifier]` | Consumption through the indexed head |
 | `invisi_getUpdates` | `[range]` | Public outputs and Credit transitions |
 | `invisi_getCreditTransitions` | `[range]` | Credit creation, draw, cancellation and top-up |
@@ -252,6 +253,18 @@ Encrypted output memos are opaque to this service. Funds envelopes use version 2
 
 Every indexed event and output candidate includes `block` with `number`, `hash`, `parentHash`, and `timestamp` (uint64 Unix seconds). The timestamp comes from the confirmed canonical header whose hash is used to fetch logs during indexing. Credit draw recovery must use the transition block timestamp to derive UTC+0 Gregorian day/month usage; never use local wall-clock time or caller-supplied dates. Draw transaction parameters contain no date fields. The private per-grant limits and counters remain encrypted; this service does not decrypt them. Credit draw proof widths are 20/86/314/734 fields for capacities 1/12/50/120.
 
-Index and snapshot format 1 persist this block context in SQLite and PostgreSQL. Block records require an explicit uint64 timestamp, including zero for the Unix epoch; malformed records and unsupported formats are rejected. Snapshots use the Credit limits source profile. Contract/API version remains 1.
+Index format 2 and snapshot format 1 persist this block context in SQLite and PostgreSQL. Block records require an explicit uint64 timestamp, including zero for the Unix epoch; malformed records and unsupported formats are rejected. Snapshots use the Registry events source profile. Contract/API version remains 1.
 
 Portable snapshots retain the existing trusted publisher/checksum model. Historical timestamps restored from a snapshot inherit that trust; hash continuity and a checkpoint hash alone do not authenticate arbitrary historical normalized records. The saved checkpoint timestamp is checked against its canonical chain header before serving.
+
+### Indexed receiving-address discovery
+
+`invisi_getReceivingAddress` accepts a nonzero 20-byte EVM owner address. The indexer follows `ReceivingKeysSet` events from the configured Registry as well as Protocol events. Its contiguous stream begins at the earlier contract deployment block. Registrations and updates are stored atomically with the containing block; latest keys are selected by block number and log index. Reorganizations remove orphaned records and restore the previous registration automatically. Polling canonical block logs also catches events missed while the service was offline.
+
+A registered result has `walletIdentity`, `viewingPublicKey` (33-byte hex), `clueKey` (32-byte hex), `nonce` (decimal uint64 string) and `block` (the indexed head: number/hash/parentHash/timestamp). The SDK validates the keys and encodes the full `0i` address locally. Unregistered owners return `null`. If indexing has not reached the Registry deployment, the method returns an error instead of claiming an owner is unregistered. Use `invisi_getStatus` to inspect progress, including when lookup returns null. Newly registered or updated keys become visible after the configured confirmation depth and index progress, just like `invisi_isSpent`.
+
+The returned block reference is not a proof of contract storage: callers trust the selected service for registered keys, or independently query their Chain RPC. Registry lookup performs no Chain RPC calls per request.
+
+Index format 2 and the `invisi-protocol-v1-registry-events` snapshot source profile include registry history. Older databases and snapshots are rejected to avoid silently missing registrations: retain the old database as a backup, configure a fresh database, and rebuild from both deployment blocks. Registry address, code hash and start block are pinned in the database and snapshot profile. No automatic deletion or reset is performed.
+
+The embedded registry ABI is generated from `invisi-protocol/contracts/out/InvisiAddressRegistry.sol/InvisiAddressRegistry.json`.

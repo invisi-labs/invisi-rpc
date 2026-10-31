@@ -436,3 +436,7 @@ func TestCreditEndpointsPreserveConfirmedBlockContext(t *testing.T) {
 		}
 	}
 }
+
+func (f *fakeBackend) ReceivingAddress(context.Context, common.Address) (*model.RegisteredReceivingAddress, error) {
+	return nil, nil
+}

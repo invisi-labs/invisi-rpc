@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"os"
 	"strings"
 	"testing"
@@ -310,5 +311,48 @@ func TestPostgresCreditBlockContextAndFormatValidation(t *testing.T) {
 		t.Fatal("accepted corrupt current index format")
 	} else if !strings.Contains(e.Error(), "unsupported index format") {
 		t.Fatal(e)
+	}
+}
+
+func TestPostgresRegistryHistory(t *testing.T) {
+	url := os.Getenv("TEST_DATABASE_URL")
+	if url == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	ctx := context.Background()
+	dep := model.Deployment{ChainID: fmt.Sprintf("registry-%d", time.Now().UnixNano()), Protocol: common.HexToAddress("0x1"), FromBlock: 10, Registry: &model.ContractDeployment{Address: common.HexToAddress("0x2"), RuntimeCodeHash: common.HexToHash("0x3"), FromBlock: 8}}
+	s, err := Open(ctx, url, dep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	defer s.pool.Exec(ctx, "DELETE FROM invisi_blocks WHERE deployment=$1", s.key)
+	owner := common.HexToAddress("0x1234")
+	for n := uint64(8); n <= 10; n++ {
+		b := model.Batch{Block: model.Block{Number: n, Hash: common.BigToHash(new(big.Int).SetUint64(n)), ParentHash: common.BigToHash(new(big.Int).SetUint64(n - 1))}}
+		if n == 8 || n == 10 {
+			b.Registrations = []model.RegistrationUpdate{{WalletIdentity: owner, ViewingPublicKey: []byte{2}, ClueKey: common.HexToHash("0x1"), Nonce: n, LogIndex: 1}}
+		}
+		if n == 10 {
+			b.Registrations = append(b.Registrations, model.RegistrationUpdate{WalletIdentity: owner, ViewingPublicKey: []byte{3}, ClueKey: common.HexToHash("0x2"), Nonce: 18446744073709551615, LogIndex: 2})
+		}
+		if err = s.Apply(ctx, b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := s.ReceivingAddress(ctx, owner)
+	if err != nil || got == nil || got.Nonce != 18446744073709551615 {
+		t.Fatalf("latest: %+v %v", got, err)
+	}
+	if err = s.Rollback(ctx, 9); err != nil {
+		t.Fatal(err)
+	}
+	got, err = s.ReceivingAddress(ctx, owner)
+	if err != nil || got == nil || got.Nonce != 8 {
+		t.Fatalf("rollback: %+v %v", got, err)
+	}
+	got, err = s.ReceivingAddress(ctx, common.HexToAddress("0x5678"))
+	if err != nil || got != nil {
+		t.Fatalf("unregistered: %+v %v", got, err)
 	}
 }
