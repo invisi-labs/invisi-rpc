@@ -53,20 +53,18 @@ func TestMemoBatchOutputsMixedLengths(t *testing.T) {
 func TestMemoBatchOutputsRejectMalformedFraming(t *testing.T) {
 	d, log := fixture(t)
 	valid := memoSegment(160, 9)
-	wrongVersion := append([]byte(nil), valid...)
-	wrongVersion[2] = 1
 	wrongPrecision := append([]byte(nil), valid...)
 	wrongPrecision[2+160+64] = 8
 	malformed := map[string][]byte{
 		"empty":            nil,
 		"truncated prefix": {0},
-		"short cipher":     memoSegment(159, 9),
-		"overlong cipher":  memoSegment(417, 9),
-		"truncated clue":   valid[:len(valid)-1],
-		"missing output":   valid,
-		"trailing bytes":   append(append([]byte(nil), valid...), 1),
-		"retired version":  wrongVersion,
-		"wrong precision":  wrongPrecision,
+		"overlong cipher":  memoSegment(4097, 9),
+
+		"truncated clue": valid[:len(valid)-1],
+		"missing output": valid,
+		"trailing bytes": append(append([]byte(nil), valid...), 1),
+
+		"wrong precision": wrongPrecision,
 	}
 	for name, packed := range malformed {
 		t.Run(name, func(t *testing.T) {
@@ -85,5 +83,37 @@ func TestMemoBatchOutputsRejectMalformedFraming(t *testing.T) {
 func TestUnifiedProtocolVersion(t *testing.T) {
 	if SupportedVersion != "1" || APIPrefix != "/v1" {
 		t.Fatal("the shared protocol release must remain v1")
+	}
+}
+
+func TestOpaqueCiphertextBatchIgnoresCodecVersions(t *testing.T) {
+	d, log := fixture(t)
+	var packed []byte
+	sizes := []int{1, 161, 502, 754, 4096}
+	for _, size := range sizes {
+		segment := memoSegment(size, 9)
+		segment[2] = 0x7f
+		packed = append(packed, segment...)
+	}
+	l := log("BatchOutputs", 1, common.Hash{}, []any{big.NewInt(2)}, uint32(91), big.NewInt(0), make([]common.Address, len(sizes)), make([][32]byte, len(sizes)), packed)
+	b, err := d.Decode(model.Block{}, []types.Log{l})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(b.Outputs) != len(sizes) {
+		t.Fatal("missing outputs")
+	}
+	for i, size := range sizes {
+		if len(b.Outputs[i].Ciphertext) != size || b.Outputs[i].LeafIndex != uint32(91+i) {
+			t.Fatal("lost framing or leaf index")
+		}
+	}
+	for _, size := range []int{0, 4097} {
+		segment := make([]byte, 2+size+68)
+		binary.BigEndian.PutUint16(segment, uint16(size))
+		l = log("BatchOutputs", 1, common.Hash{}, []any{big.NewInt(2)}, uint32(91), big.NewInt(0), make([]common.Address, 1), make([][32]byte, 1), segment)
+		if _, err := d.Decode(model.Block{}, []types.Log{l}); err == nil {
+			t.Fatal("accepted invalid resource size")
+		}
 	}
 }
