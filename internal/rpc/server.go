@@ -29,6 +29,7 @@ type Backend interface {
 	ReceivingAddress(context.Context, common.Address) (*model.RegisteredReceivingAddress, error)
 }
 type API struct {
+	Transactions     TransactionReader
 	Store            Backend
 	Deployment       model.Deployment
 	version          VersionInfo

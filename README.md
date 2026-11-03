@@ -169,6 +169,7 @@ POST JSON-RPC 2.0 to `/v1/chains/<chainId>` using positional parameter arrays. `
 | `invisi_getReceivingAddress` | `[ownerAddress]` | Indexed registered public keys and nonce with the indexed block reference; `null` if unregistered |
 | `invisi_isSpent` | `[nullifier]` | Consumption through the indexed head |
 | `invisi_getUpdates` | `[range]` | Public outputs and Credit transitions |
+| `invisi_getTransactionUpdates` | `[transactionHash]` | One transaction’s indexed outputs and Credit transitions, with explicit availability status |
 | `invisi_getCreditTransitions` | `[range]` | Credit creation, draw, cancellation and top-up |
 | `invisi_detectOutputs` | `[range, detectionKey]` | FMD candidates and Credit transitions |
 
@@ -181,6 +182,26 @@ curl http://127.0.0.1:8080/v1/chains/31337 \
 ```
 
 Live indexing stores contract-recorded **batch-final roots**, never per-leaf intermediate roots. Each new root is checked against `rootHistory(treeId, root)` at the exact block before committing. Historical nodes are versioned by leaf count; events, outputs, nullifiers, roots and checkpoints commit or roll back together. The service does not calculate a user's private balance or prove response completeness.
+
+## Updates for one transaction
+
+Call `invisi_getTransactionUpdates` with one nonzero, 32-byte transaction hash. The server obtains the mined receipt from the configured Chain RPC, then reads that block from its existing local index. It does not scan historical ranges or substitute live upstream logs for indexed results. No new database or snapshot format is required.
+
+```json
+{"jsonrpc":"2.0","id":1,"method":"invisi_getTransactionUpdates","params":["0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"]}
+```
+
+The result includes `transactionHash`, `status`, `indexedHead`, `outputs` and `creditTransitions`. When a mined receipt exists, it also includes `blockNumber`, `blockHash` and `receiptStatus` (0 for reverted, 1 for successful). Availability status is separate from EVM execution success:
+
+| Status | Meaning | Update collections |
+| --- | --- | --- |
+| `not_found` | Chain RPC has no mined receipt; the hash may be unknown or the transaction may still be pending | `null` |
+| `pending_index` | The receipt exists, but the local index has not reached its canonical block or still contains a different fork | `null` |
+| `indexed` | The canonical transaction block was indexed and checked during this request | Arrays; empty arrays mean no matching protocol updates |
+
+Outputs retain the same shape as `getUpdates`; Credit transitions include creation, draw, cancellation and top-up. Other transactions in the same block are excluded. An unrelated or reverted transaction in an indexed block can therefore return `indexed` with empty arrays. Transactions before the configured index starting block return an error. Upstream failures and reorganizations observed during response construction return errors, never an empty success. Responses use the same 8 MiB query budget; an oversized result returns an error directing callers to `invisi_getBlock`.
+
+`pending_index` includes confirmation-delayed indexing and is retryable. Clients should still authenticate canonical receipts and output commitments through their own Chain RPC, retain block references, and handle later reorganizations. This query does not establish finality, decrypt outputs or provide sender-private history.
 
 ## Optional delegated FMD
 

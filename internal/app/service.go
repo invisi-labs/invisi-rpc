@@ -156,6 +156,7 @@ func prepareChain(ctx context.Context, c config.Chain, reconcile bool) (runtime 
 	if err != nil {
 		return nil, err
 	}
+	api.Transactions = client
 	handler, err := apirpc.HTTPHandler(api)
 	if err != nil {
 		return nil, err
