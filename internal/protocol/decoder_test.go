@@ -130,6 +130,8 @@ type creationTuple struct {
 	Owner            common.Address
 	Expiry           *big.Int
 	Deadline         *big.Int
+	FeeRecipient     common.Address
+	FeeAmount        *big.Int
 }
 type topupTuple struct {
 	Creation        creationTuple
@@ -141,7 +143,7 @@ type topupTuple struct {
 func TestTopUpNestedTuples(t *testing.T) {
 	d, log := fixture(t)
 	tx := common.Hash{}
-	p := topupTuple{Creation: creationTuple{Sources: []sourceTuple{{big.NewInt(1), [32]byte{1}}}, Nullifiers: [][32]byte{{2}}, CreditCommitment: [32]byte{3}, Expiry: big.NewInt(9), Deadline: big.NewInt(8)}, CreditSource: sourceTuple{big.NewInt(1), [32]byte{4}}, CreditNullifier: [32]byte{5}, PreviousExpiry: big.NewInt(7)}
+	p := topupTuple{Creation: creationTuple{Sources: []sourceTuple{{big.NewInt(1), [32]byte{1}}}, Nullifiers: [][32]byte{{2}}, CreditCommitment: [32]byte{3}, Expiry: big.NewInt(9), Deadline: big.NewInt(8), FeeRecipient: common.HexToAddress("0x1234"), FeeAmount: big.NewInt(2)}, CreditSource: sourceTuple{big.NewInt(1), [32]byte{4}}, CreditNullifier: [32]byte{5}, PreviousExpiry: big.NewInt(7)}
 	ins := log("CommitmentsInserted", 1, tx, []any{big.NewInt(1)}, uint32(4), [][32]byte{{3}})
 	top := log("CreditToppedUp", 2, tx, []any{common.Address{}, big.NewInt(1)}, p, []uint32{4}, []delivery{{[]byte{1}, nil}, {[]byte{2}, nil}, {}})
 	b, err := d.Decode(model.Block{}, []types.Log{ins, top})

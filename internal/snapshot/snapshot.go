@@ -25,7 +25,7 @@ import (
 const (
 	FormatVersion                     = 1
 	SourceProfile                     = "invisi-protocol-v1-broadcaster-events"
-	ABIHash                           = "185ee4c59c4ff5ef3f444c2141436b6e43027b20fc1ea1cd26679fefc711ccc7"
+	ABIHash                           = "62b33150b2f14f253080c10c48bc15399ba1fbf33f92e32ee0995b7b18a86c1f"
 	DefaultMaxDecompressedBytes int64 = 8 << 30
 	MaxRecordBytes                    = 64 << 20
 )
