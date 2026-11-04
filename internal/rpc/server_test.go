@@ -440,3 +440,7 @@ func TestCreditEndpointsPreserveConfirmedBlockContext(t *testing.T) {
 func (f *fakeBackend) ReceivingAddress(context.Context, common.Address) (*model.RegisteredReceivingAddress, error) {
 	return nil, nil
 }
+
+func (f *fakeBackend) Broadcasters(context.Context, model.BroadcasterQuery) (*model.BroadcasterPage, error) {
+	return &model.BroadcasterPage{}, nil
+}

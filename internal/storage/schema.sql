@@ -32,3 +32,12 @@ CREATE TABLE IF NOT EXISTS invisi_registrations (
  PRIMARY KEY(deployment,owner,block_number,log_index), FOREIGN KEY(deployment,block_number) REFERENCES invisi_blocks ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS invisi_registry_profiles (deployment text PRIMARY KEY, profile text NOT NULL);
+
+CREATE TABLE IF NOT EXISTS invisi_broadcasters (
+ deployment text NOT NULL, operator bytea NOT NULL, block_number bigint NOT NULL, log_index bigint NOT NULL, kind text NOT NULL, value jsonb NOT NULL,
+ PRIMARY KEY(deployment,operator,block_number,log_index), FOREIGN KEY(deployment,block_number) REFERENCES invisi_blocks ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS invisi_broadcaster_profiles (deployment text PRIMARY KEY, profile text NOT NULL);
+
+CREATE TABLE IF NOT EXISTS invisi_broadcaster_formats (deployment text PRIMARY KEY, version integer NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS invisi_broadcaster_positions ON invisi_broadcasters(deployment,block_number,log_index);

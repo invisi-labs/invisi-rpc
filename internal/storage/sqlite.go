@@ -119,6 +119,9 @@ func OpenSQLite(ctx context.Context, path string, d model.Deployment) (*SQLiteSt
 		}
 	}
 	if e == nil {
+		e = s.ensureBroadcasterProfile(ctx, tx)
+	}
+	if e == nil {
 		_, e = tx.Exec(ctx, "INSERT INTO invisi_index_formats VALUES(?1,2) ON CONFLICT DO NOTHING", s.key)
 	}
 	if e == nil {
@@ -173,6 +176,14 @@ CREATE TABLE IF NOT EXISTS invisi_deployments (
 );
 
 CREATE TABLE IF NOT EXISTS invisi_index_formats (deployment TEXT PRIMARY KEY, version INTEGER NOT NULL);
+
+CREATE TABLE IF NOT EXISTS invisi_broadcasters (
+ deployment text NOT NULL, operator blob NOT NULL, block_number bigint NOT NULL, log_index bigint NOT NULL, kind text NOT NULL, value text NOT NULL,
+ PRIMARY KEY(deployment,operator,block_number,log_index), FOREIGN KEY(deployment,block_number) REFERENCES invisi_blocks ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS invisi_broadcaster_profiles (deployment text PRIMARY KEY, profile text NOT NULL);
+CREATE TABLE IF NOT EXISTS invisi_broadcaster_formats (deployment text PRIMARY KEY, version integer NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS invisi_broadcaster_positions ON invisi_broadcasters(deployment,block_number,log_index);
 `
 
 type sqliteQuerier interface {
@@ -279,6 +290,9 @@ func (s *SQLiteStore) apply(ctx context.Context, tx *sqliteTx, b model.Batch) er
 		return err
 	}
 	if _, err = tx.Exec(ctx, "INSERT INTO invisi_blocks VALUES(?1,?2,?3,?4,?5)", s.key, b.Block.Number, b.Block.Hash[:], b.Block.ParentHash[:], raw); err != nil {
+		return err
+	}
+	if err = s.applyBroadcasters(ctx, tx, b); err != nil {
 		return err
 	}
 	for _, registration := range b.Registrations {

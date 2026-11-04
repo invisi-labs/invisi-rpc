@@ -62,6 +62,9 @@ func CheckAvailability(ctx context.Context, client *ethclient.Client, store stor
 	}
 	// Root validation requires state at each indexed height, not merely header retention.
 	contracts := []model.ContractDeployment{{Address: c.Deployment.Protocol, RuntimeCodeHash: c.Deployment.RuntimeCodeHash, FromBlock: c.Deployment.FromBlock}}
+	if c.Deployment.BroadcasterRegistry != nil {
+		contracts = append(contracts, *c.Deployment.BroadcasterRegistry)
+	}
 	if c.Deployment.Registry != nil {
 		contracts = append(contracts, *c.Deployment.Registry)
 	}

@@ -15,11 +15,12 @@ type ContractDeployment struct {
 }
 
 type Deployment struct {
-	Registry        *ContractDeployment `json:"registry,omitempty"`
-	ChainID         string              `json:"chainId"`
-	Protocol        common.Address      `json:"protocolAddress"`
-	FromBlock       uint64              `json:"fromBlock"`
-	RuntimeCodeHash common.Hash         `json:"runtimeCodeHash"`
+	Registry            *ContractDeployment `json:"registry,omitempty"`
+	BroadcasterRegistry *ContractDeployment `json:"broadcasterRegistry,omitempty"`
+	ChainID             string              `json:"chainId"`
+	Protocol            common.Address      `json:"protocolAddress"`
+	FromBlock           uint64              `json:"fromBlock"`
+	RuntimeCodeHash     common.Hash         `json:"runtimeCodeHash"`
 }
 type Block struct {
 	Timestamp  uint64      `json:"timestamp"`
@@ -89,7 +90,37 @@ type RegisteredReceivingAddress struct {
 	Nonce            uint64         `json:"nonce,string"`
 	Block            Block          `json:"block"`
 }
+type BroadcasterUpdate struct {
+	Operator     common.Address `json:"operator"`
+	Endpoint     string         `json:"endpoint,omitempty"`
+	MetadataURI  string         `json:"metadataURI,omitempty"`
+	QuoteSigner  common.Address `json:"quoteSigner"`
+	FeeRecipient common.Address `json:"feeRecipient"`
+	Enabled      *bool          `json:"enabled,omitempty"`
+	LogIndex     uint           `json:"logIndex"`
+}
+type RegisteredBroadcaster struct {
+	Block        Block          `json:"block"`
+	Operator     common.Address `json:"operator"`
+	Endpoint     string         `json:"endpoint"`
+	MetadataURI  string         `json:"metadataURI"`
+	QuoteSigner  common.Address `json:"quoteSigner"`
+	FeeRecipient common.Address `json:"feeRecipient"`
+	Enabled      bool           `json:"enabled"`
+}
+type BroadcasterQuery struct {
+	Enabled *bool          `json:"enabled,omitempty"`
+	After   common.Address `json:"after,omitempty"`
+	Limit   int            `json:"limit"`
+	Block   *Block         `json:"block,omitempty"`
+}
+type BroadcasterPage struct {
+	Block        Block                   `json:"block"`
+	Broadcasters []RegisteredBroadcaster `json:"broadcasters"`
+	Next         *common.Address         `json:"next,omitempty"`
+}
 type Batch struct {
+	Broadcasters  []BroadcasterUpdate  `json:"broadcasters,omitempty"`
 	Registrations []RegistrationUpdate `json:"registrations,omitempty"`
 	Block         Block                `json:"block"`
 	Logs          []types.Log          `json:"logs"`

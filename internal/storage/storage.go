@@ -55,6 +55,9 @@ func Open(ctx context.Context, url string, deployment model.Deployment) (*Store,
 		_, err = tx.Exec(ctx, schema)
 	}
 	if err == nil {
+		err = s.lock(ctx, tx)
+	}
+	if err == nil {
 		_, err = tx.Exec(ctx, "INSERT INTO invisi_deployments VALUES($1,$2,$3) ON CONFLICT DO NOTHING", s.key, deployment.FromBlock, deployment.RuntimeCodeHash[:])
 	}
 	if err == nil {
@@ -75,6 +78,9 @@ func Open(ctx context.Context, url string, deployment model.Deployment) (*Store,
 				err = errors.New("registry deployment differs from persisted configuration")
 			}
 		}
+	}
+	if err == nil {
+		err = s.ensureBroadcasterProfile(ctx, tx)
 	}
 	if err == nil {
 		_, err = tx.Exec(ctx, "INSERT INTO invisi_index_formats VALUES($1,2) ON CONFLICT DO NOTHING", s.key)
@@ -212,6 +218,9 @@ func (s *Store) apply(ctx context.Context, tx pgx.Tx, b model.Batch) error {
 		return err
 	}
 	if _, err = tx.Exec(ctx, "INSERT INTO invisi_blocks VALUES($1,$2,$3,$4,$5)", s.key, b.Block.Number, b.Block.Hash[:], b.Block.ParentHash[:], raw); err != nil {
+		return err
+	}
+	if err = s.applyBroadcasters(ctx, tx, b); err != nil {
 		return err
 	}
 	for _, registration := range b.Registrations {

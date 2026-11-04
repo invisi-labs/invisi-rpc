@@ -60,10 +60,19 @@ func (i *Indexer) Verify(ctx context.Context) error {
 			return errors.New("registry runtime code hash mismatch")
 		}
 	}
+	if i.Deployment.BroadcasterRegistry != nil {
+		code, err = i.Chain.CodeAt(ctx, i.Deployment.BroadcasterRegistry.Address, nil)
+		if err != nil {
+			return err
+		}
+		if len(code) == 0 || crypto.Keccak256Hash(code) != i.Deployment.BroadcasterRegistry.RuntimeCodeHash {
+			return errors.New("broadcaster registry runtime code hash mismatch")
+		}
+	}
 	return nil
 }
 func allowedEmitter(d model.Deployment, address common.Address, number uint64) bool {
-	return (address == d.Protocol && number >= d.FromBlock) || (d.Registry != nil && address == d.Registry.Address && number >= d.Registry.FromBlock)
+	return (d.BroadcasterRegistry != nil && address == d.BroadcasterRegistry.Address && number >= d.BroadcasterRegistry.FromBlock) || (address == d.Protocol && number >= d.FromBlock) || (d.Registry != nil && address == d.Registry.Address && number >= d.Registry.FromBlock)
 }
 
 // Step processes at most one confirmed block. A false result means the indexer is caught up.
@@ -138,11 +147,19 @@ func (i *Indexer) Step(ctx context.Context) (bool, error) {
 	if i.Deployment.Registry != nil && next >= i.Deployment.Registry.FromBlock {
 		addresses = append(addresses, i.Deployment.Registry.Address)
 	}
+	if i.Deployment.BroadcasterRegistry != nil && next >= i.Deployment.BroadcasterRegistry.FromBlock {
+		addresses = append(addresses, i.Deployment.BroadcasterRegistry.Address)
+	}
 	logs, err := i.Chain.FilterLogs(ctx, ethereum.FilterQuery{BlockHash: &hash, Addresses: addresses})
 	if err != nil {
 		return false, err
 	}
+	seenLogs := make(map[uint]struct{}, len(logs))
 	for _, l := range logs {
+		if _, ok := seenLogs[l.Index]; ok {
+			return false, errors.New("RPC returned duplicate log index")
+		}
+		seenLogs[l.Index] = struct{}{}
 		if l.BlockHash != hash || l.BlockNumber != next || !allowedEmitter(i.Deployment, l.Address, next) || l.Removed {
 			return false, errors.New("RPC returned inconsistent log")
 		}

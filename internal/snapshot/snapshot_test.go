@@ -331,7 +331,11 @@ func TestPinnedABIHashMatchesSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sum := sha256.Sum256(append(b, registry...))
+	broadcaster, err := os.ReadFile("../protocol/BroadcasterRegistry.abi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(append(append(b, registry...), broadcaster...))
 	if hex.EncodeToString(sum[:]) != ABIHash {
 		t.Fatal("snapshot ABI hash differs from pinned decoder ABI")
 	}
@@ -626,5 +630,57 @@ func TestRegistrySnapshotRoundTripAndPins(t *testing.T) {
 	changed.Registry = &model.ContractDeployment{Address: common.HexToAddress("0x4"), RuntimeCodeHash: dep.Registry.RuntimeCodeHash, FromBlock: 8}
 	if err = Restore(ctx, destination, changed, path, fileHash(t, path)); err == nil {
 		t.Fatal("accepted mismatched registry")
+	}
+}
+
+func TestBroadcasterSnapshotRoundTripAndPins(t *testing.T) {
+	ctx := context.Background()
+	dep := model.Deployment{ChainID: "97", Protocol: common.HexToAddress("0x1"), FromBlock: 10, BroadcasterRegistry: &model.ContractDeployment{Address: common.HexToAddress("0x2"), RuntimeCodeHash: common.HexToHash("0x3"), FromBlock: 8}}
+	source, err := storage.OpenSQLite(ctx, filepath.Join(t.TempDir(), "source.db"), dep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer source.Close()
+	owner := common.HexToAddress("0x1234")
+	on, off := true, false
+	for n := uint64(8); n <= 10; n++ {
+		b := model.Batch{Block: model.Block{Number: n, Hash: common.BigToHash(new(big.Int).SetUint64(n)), ParentHash: common.BigToHash(new(big.Int).SetUint64(n - 1))}}
+		if n == 8 {
+			b.Broadcasters = []model.BroadcasterUpdate{{Operator: owner, Endpoint: "https://relay.example", QuoteSigner: owner, FeeRecipient: owner, LogIndex: 1}, {Operator: owner, Enabled: &on, LogIndex: 2}}
+		}
+		if n == 10 {
+			b.Broadcasters = []model.BroadcasterUpdate{{Operator: owner, Enabled: &off, LogIndex: 1}}
+		}
+		if err = source.Apply(ctx, b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	path, err := Export(ctx, source, dep, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dest, err := storage.OpenSQLite(ctx, filepath.Join(t.TempDir(), "dest.db"), dep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dest.Close()
+	if err = Restore(ctx, dest, dep, path, fileHash(t, path)); err != nil {
+		t.Fatal(err)
+	}
+	page, err := dest.Broadcasters(ctx, model.BroadcasterQuery{Limit: 10})
+	if err != nil || len(page.Broadcasters) != 1 || page.Broadcasters[0].Enabled {
+		t.Fatalf("restored %+v %v", page, err)
+	}
+	if err = dest.Rollback(ctx, 9); err != nil {
+		t.Fatal(err)
+	}
+	page, err = dest.Broadcasters(ctx, model.BroadcasterQuery{Limit: 10})
+	if err != nil || !page.Broadcasters[0].Enabled {
+		t.Fatalf("rollback %+v %v", page, err)
+	}
+	changed := dep
+	changed.BroadcasterRegistry = nil
+	if err = Restore(ctx, dest, changed, path, fileHash(t, path)); err == nil {
+		t.Fatal("accepted omitted broadcaster pins")
 	}
 }

@@ -72,7 +72,7 @@ func Load(path string) (Catalog, error) {
 	return c, nil
 }
 func validateProfile(p Profile) error {
-	if err := (model.Deployment{Registry: p.Registry}).ValidateMetadata(); err != nil {
+	if err := (model.Deployment{Protocol: p.Protocol.Address, Registry: p.Registry, BroadcasterRegistry: p.BroadcasterRegistry}).ValidateMetadata(); err != nil {
 		return err
 	}
 	if p.Protocol.Address == (common.Address{}) || p.Protocol.RuntimeCodeHash == (common.Hash{}) {
@@ -94,7 +94,7 @@ func (c Catalog) Resolve(chainID string) (model.Deployment, error) {
 	if err := validateProfile(p); err != nil {
 		return model.Deployment{}, err
 	}
-	return model.Deployment{Registry: p.Registry, ChainID: chainID, Protocol: p.Protocol.Address, RuntimeCodeHash: p.Protocol.RuntimeCodeHash, FromBlock: p.Protocol.FromBlock}, nil
+	return model.Deployment{Registry: p.Registry, BroadcasterRegistry: p.BroadcasterRegistry, ChainID: chainID, Protocol: p.Protocol.Address, RuntimeCodeHash: p.Protocol.RuntimeCodeHash, FromBlock: p.Protocol.FromBlock}, nil
 }
 
 // Reject duplicate keys before typed decoding; encoding/json otherwise silently

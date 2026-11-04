@@ -26,6 +26,7 @@ type Backend interface {
 	Events(context.Context, uint64, uint64, int) ([]model.Event, error)
 	Outputs(context.Context, uint64, uint64, int) ([]model.Output, error)
 	IsSpent(context.Context, common.Hash) (bool, error)
+	Broadcasters(context.Context, model.BroadcasterQuery) (*model.BroadcasterPage, error)
 	ReceivingAddress(context.Context, common.Address) (*model.RegisteredReceivingAddress, error)
 }
 type API struct {

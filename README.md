@@ -286,6 +286,48 @@ A registered result has `walletIdentity`, `viewingPublicKey` (33-byte hex), `clu
 
 The returned block reference is not a proof of contract storage: callers trust the selected service for registered keys, or independently query their Chain RPC. Registry lookup performs no Chain RPC calls per request.
 
-Index format 2 and the `invisi-protocol-v1-registry-events` snapshot source profile include registry history. Older databases and snapshots are rejected to avoid silently missing registrations: retain the old database as a backup, configure a fresh database, and rebuild from both deployment blocks. Registry address, code hash and start block are pinned in the database and snapshot profile. No automatic deletion or reset is performed.
+Index format 2 includes receiving-key registry history; the current `invisi-protocol-v1-broadcaster-events` snapshot profile additionally covers Broadcaster events. Older databases and snapshots are rejected to avoid silently missing registrations: retain the old database as a backup, configure a fresh database, and rebuild from both deployment blocks. Registry address, code hash and start block are pinned in the database and snapshot profile. No automatic deletion or reset is performed.
 
 The embedded registry ABI is generated from `invisi-protocol/contracts/out/InvisiAddressRegistry.sol/InvisiAddressRegistry.json`.
+
+### Indexed Broadcaster discovery
+
+Set optional `deployment.broadcasterRegistry` to the independently deployed registry's
+`address`, `runtimeCodeHash` and `fromBlock` in `deployment.json` before `chain add`.
+The optional field has the same pinned contract shape as `registry`:
+
+```json
+"broadcasterRegistry": {
+  "address": "0x...",
+  "runtimeCodeHash": "0x...",
+  "fromBlock": 123456
+}
+```
+
+Use verified deployment values; no registry address is built into the service.
+All event source addresses must be distinct. The indexer verifies runtime code and follows
+`BroadcasterSet` and `AvailabilitySet` alongside Protocol and receiving-key events.
+Registration updates preserve the current availability; `setEnabled` controls it separately.
+Records are persisted transactionally in SQLite or PostgreSQL and restored on chain rollback.
+Adding or changing registry pins on an existing populated index requires a fresh database;
+configuration changes never silently skip earlier registrations.
+
+`invisi_getBroadcasters` uses one positional query object:
+
+```json
+{"jsonrpc":"2.0","id":1,"method":"invisi_getBroadcasters","params":[{"enabled":true,"limit":100}]}
+```
+
+The result is `{block, broadcasters, next?}`. Each record contains `operator`, `endpoint`,
+`metadataURI`, `quoteSigner`, `feeRecipient`, `enabled` and the last update `block`. `enabled` is an optional boolean
+filter; omit it for all records. `limit` defaults to 100 and must be 1–100. Results are ordered
+by operator address. If `next` is present, pass it as `after` with the exact returned `block`
+anchor for the next page. Unknown or reorganized anchors are rejected. No registry configured,
+or an index that has not reached its deployment block, produces an error rather than an empty
+list. Clients must still verify signed quotes; registration and enabled status are public
+operator declarations, not an endorsement or live availability guarantee. The RPC does not
+register services, change their data or call their endpoints.
+
+Snapshots use the `invisi-protocol-v1-broadcaster-events` source profile and pin all three
+ABIs and configured deployments. Earlier snapshot profiles must be rebuilt/exported with the
+current indexer. This does not change on-chain Protocol VERSION 1.

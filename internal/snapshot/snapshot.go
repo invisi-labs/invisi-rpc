@@ -24,8 +24,8 @@ import (
 
 const (
 	FormatVersion                     = 1
-	SourceProfile                     = "invisi-protocol-v1-registry-events"
-	ABIHash                           = "d0363077986ff88b5aee189f1931a2286d7ec3e8d7b7e5208b05807be3b0d3c9"
+	SourceProfile                     = "invisi-protocol-v1-broadcaster-events"
+	ABIHash                           = "185ee4c59c4ff5ef3f444c2141436b6e43027b20fc1ea1cd26679fefc711ccc7"
 	DefaultMaxDecompressedBytes int64 = 8 << 30
 	MaxRecordBytes                    = 64 << 20
 )
@@ -63,8 +63,8 @@ func checkHeader(h Header, dep *model.Deployment) error {
 	if h.Checkpoint != nil {
 		return errors.New("checkpoint belongs in snapshot footer")
 	}
-	// Both event sources bind indexed history and derived registry state.
-	if dep != nil && (h.Deployment.ChainID != dep.ChainID || h.Deployment.Protocol != dep.Protocol || h.Deployment.FromBlock != dep.FromBlock || h.Deployment.RuntimeCodeHash != dep.RuntimeCodeHash || !reflect.DeepEqual(h.Deployment.Registry, dep.Registry)) {
+	// All configured event sources bind indexed history and derived registry state.
+	if dep != nil && (h.Deployment.ChainID != dep.ChainID || h.Deployment.Protocol != dep.Protocol || h.Deployment.FromBlock != dep.FromBlock || h.Deployment.RuntimeCodeHash != dep.RuntimeCodeHash || !reflect.DeepEqual(h.Deployment.Registry, dep.Registry) || !reflect.DeepEqual(h.Deployment.BroadcasterRegistry, dep.BroadcasterRegistry)) {
 		return errors.New("snapshot deployment differs from configured chain, protocol, runtime code hash, or start block")
 	}
 	return nil
