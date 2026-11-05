@@ -2,6 +2,12 @@
 
 Standalone Go service for public Invisi data: canonical events, shared Note Trees, historical membership paths and optional delegated FMD filtering. No Invisi SDK dependency. Wallet clients retain decryption, private note storage, authorization and proving, and verify results through an independent Chain RPC.
 
+## Release downloads
+
+Pushing a stable `vX.Y.Z` tag runs tests and publishes the multi-platform GHCR image and GitHub Release binaries from the same tagged source. Manual workflow dispatch accepts an existing tag. Existing Release notes are preserved when assets are uploaded.
+
+Release archives are named `invisi-protocol-rpc_vX.Y.Z_<os>_<arch>`, covering Linux, macOS (`darwin`) and Windows on `amd64` and `arm64`. Linux/macOS use `.tar.gz`; Windows uses `.zip`. Each archive contains the CLI, LICENSE and README. Binaries require no Go installation or C runtime. Download `SHA256SUMS-vX.Y.Z.txt` to verify archive checksums before extraction. Configure the deployment catalog and chain RPC as described below; credentials and local configuration are never bundled.
+
 ## Initialize and run
 
 Requirements: Go 1.26+, an EVM Chain RPC for each selected chain, and either SQLite (default, embedded) or PostgreSQL 16+. The CLI uses [urfave/cli v3](https://cli.urfave.org/v3/).
@@ -173,7 +179,7 @@ POST JSON-RPC 2.0 to `/v1/chains/<chainId>` using positional parameter arrays. `
 | `invisi_getCreditTransitions` | `[range]` | Credit creation, draw, cancellation and top-up |
 | `invisi_detectOutputs` | `[range, detectionKey]` | FMD candidates and Credit transitions |
 
-A range is `{ "fromBlock": 100, "toBlock": 110, "blockHash": "0x…" }`. The hash must match indexed `toBlock`, obtained through `getBlock` or `getStatus`. Queries accept at most 100 blocks and 10,000 results; overflow returns an error. Use smaller ranges or full blocks. Reorganizations invalidate old anchors; recheck when combining responses.
+A range is `{ "fromBlock": 100, "toBlock": 110, "blockHash": "0x…" }`. The hash must match indexed `toBlock`, obtained through `getBlock` or `getStatus`. Queries accept at most 10,000 blocks (the inclusive `rpc.MaxUpdateBlocks` limit) and 10,000 results; overflow returns an error. Use smaller ranges or full blocks. Reorganizations invalidate old anchors; recheck when combining responses.
 
 ```sh
 curl http://127.0.0.1:8080/v1/chains/31337 \
@@ -209,7 +215,7 @@ Outputs retain the same shape as `getUpdates`; Credit transitions include creati
 
 Senders generate 24-bit, 68-byte clues. The service checks a configurable 1–24-bit prefix (`detectionBits: 8` by default). Public preparation is cached; detection remains key-specific. Two scans may run concurrently, with at most 1,000 deliveries per request, independently of indexing.
 
-Malformed/unsupported clues are returned with `fallback: true` for local inspection. Credit transitions are returned separately because remainder recovery may need a parent/shared key even when the child envelope cannot be decrypted. Clients decrypt and verify candidates. A valid but deliberately unrelated clue cannot be classified as malformed; complete recovery retrieves events without FMD filtering.
+Intentional funds outputs with paired empty ciphertext/clue are indexed with their exact commitment and leaf position but omitted from FMD candidates. Malformed/unsupported nonempty clues are returned with `fallback: true` for local inspection. Credit transitions are returned separately because remainder recovery may need a parent/shared key even when the child envelope cannot be decrypted. Clients decrypt and verify candidates. A valid but deliberately unrelated clue cannot be classified as malformed; complete recovery retrieves events without FMD filtering.
 
 Detection is request-driven. Persistent per-user delegation queues and WebSocket delivery are not implemented. Applications manage cursors, retries and reorg handling.
 
@@ -268,7 +274,7 @@ The Docker image contains no deployment catalog. Mount `invisi-protocol/deployme
 
 Clients call `invisi_getDeployment` on `/v1/chains/<chainId>` before constructing their Protocol object. The response contains `apiVersion`, `protocolVersion` and `deployment`. Deployment fields are `chainId`, `protocol` and optional `registry`. Both contracts use `address`, `runtimeCodeHash` and `fromBlock`, represented by one shared contract deployment type. Set `registry` in the chain's `deployment.json` profile before `chain add`; they are copied into the initialized configuration. Existing initialized configurations can set these metadata fields in their deployment section while stopped. Public and private installations use the same interface. Deployment metadata identifies the service's selected pool; clients choose a trusted service or independently pin the deployment, then verify chain facts through Chain RPC.
 
-Encrypted output memos are opaque to this service. Ciphertexts are opaque nonempty byte strings bounded at 4096 bytes, regardless of envelope version or note kind. The service does not interpret wallet codec versions, flags, return addresses or memo schemas. The current SDK uses codec version 1 for both funds and Credit (first-byte high bit 0/1 identifies the kind, low seven bits carry version 1..127; headers 0x01/0x81); adding another wallet codec within the shared resource bound requires no server changes. Aggregate outputs frame each delivery as a two-byte big-endian ciphertext length, ciphertext, then a 68-byte FMD clue. The decoder validates framing and preserves each output's token, commitment and leaf position; wallet SDKs decrypt and interpret payload data.
+Encrypted output memos are opaque to this service. Present ciphertexts are opaque byte strings bounded at 4096 bytes, regardless of envelope version or note kind. Funds outputs may instead carry paired empty ciphertext/clue; active Credit role deliveries remain mandatory. The service does not interpret wallet codec versions, flags, return addresses or memo schemas. The current SDK uses codec version 1 for both funds and Credit (first-byte high bit 0/1 identifies the kind, low seven bits carry version 1..127; headers 0x01/0x81); adding another wallet codec within the shared resource bound requires no server changes. Aggregate outputs frame each nonempty delivery as a two-byte big-endian ciphertext length, ciphertext, then a 68-byte FMD clue. An omitted funds delivery uses only a zero two-byte length prefix, with no following clue. The decoder validates framing and preserves each output's token, commitment and leaf position; wallet SDKs decrypt and interpret payload data.
 
 ### Credit recovery block context
 
@@ -282,7 +288,7 @@ Portable snapshots retain the existing trusted publisher/checksum model. Histori
 
 `invisi_getReceivingAddress` accepts a nonzero 20-byte EVM owner address. The indexer follows `ReceivingKeysSet` events from the configured Registry as well as Protocol events. Its contiguous stream begins at the earlier contract deployment block. Registrations and updates are stored atomically with the containing block; latest keys are selected by block number and log index. Reorganizations remove orphaned records and restore the previous registration automatically. Polling canonical block logs also catches events missed while the service was offline.
 
-A registered result has `walletIdentity`, `viewingPublicKey` (33-byte hex), `clueKey` (32-byte hex), `nonce` (decimal uint64 string) and `block` (the indexed head: number/hash/parentHash/timestamp). The SDK validates the keys and encodes the full `0i` address locally. Unregistered owners return `null`. If indexing has not reached the Registry deployment, the method returns an error instead of claiming an owner is unregistered. Use `invisi_getStatus` to inspect progress, including when lookup returns null. Newly registered or updated keys become visible after the configured confirmation depth and index progress, just like `invisi_isSpent`.
+A registered result has `ownerAddress`, `viewingPublicKey` (33-byte hex), `clueKey` (32-byte hex), `nonce` (decimal uint64 string) and `block` (the indexed head: number/hash/parentHash/timestamp). The SDK validates the keys and encodes the full `0i` address locally. Unregistered owners return `null`. If indexing has not reached the Registry deployment, the method returns an error instead of claiming an owner is unregistered. Use `invisi_getStatus` to inspect progress, including when lookup returns null. Newly registered or updated keys become visible after the configured confirmation depth and index progress, just like `invisi_isSpent`.
 
 The returned block reference is not a proof of contract storage: callers trust the selected service for registered keys, or independently query their Chain RPC. Registry lookup performs no Chain RPC calls per request.
 

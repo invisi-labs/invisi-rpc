@@ -1,4 +1,4 @@
-name: Publish container image
+name: Publish release
 
 on:
   push:
@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: image-${{ inputs.tag || github.ref_name }}
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 env:
@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
-      contents: read
+      contents: write
       packages: write
     steps:
       - name: Validate release tag
@@ -64,6 +64,10 @@ jobs:
         run: |
           go test ./... -count=1
           go vet ./...
+
+      - name: Build release binaries
+        working-directory: source
+        run: ../scripts/build-release.sh "$RELEASE_TAG" ../release-assets
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -103,3 +107,15 @@ jobs:
           docker run --rm "$IMAGE@$DIGEST" --help
           echo "Source commit: \`$SOURCE_COMMIT\`." >> "$GITHUB_STEP_SUMMARY"
           echo "Published \`$IMAGE@$DIGEST\` for \`$RELEASE_TAG\`." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish GitHub Release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --verify-tag --title "$RELEASE_TAG" --generate-notes --draft
+          fi
+          gh release upload "$RELEASE_TAG" release-assets/* --clobber
+          gh release edit "$RELEASE_TAG" --draft=false
+          echo "Uploaded six platform archives and SHA-256 checksums to the GitHub Release." >> "$GITHUB_STEP_SUMMARY"

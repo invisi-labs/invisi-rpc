@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -101,10 +102,13 @@ func (a *API) IsSpent(ctx context.Context, nullifier common.Hash) (bool, error) 
 	return a.Store.IsSpent(ctx, nullifier)
 }
 
+// MaxUpdateBlocks is the inclusive block limit for every ranged RPC query.
+const MaxUpdateBlocks = 10000
+
 // Every ranged query is bound to a canonical indexed end-block hash.
 func (a *API) checkRange(ctx context.Context, r Range) error {
-	if r.ToBlock < r.FromBlock || r.ToBlock-r.FromBlock > 99 || r.BlockHash == (common.Hash{}) {
-		return errors.New("range requires at most 100 blocks and an indexed end blockHash")
+	if r.ToBlock < r.FromBlock || r.ToBlock-r.FromBlock >= MaxUpdateBlocks || r.BlockHash == (common.Hash{}) {
+		return fmt.Errorf("range requires at most %d blocks and an indexed end blockHash", MaxUpdateBlocks)
 	}
 	b, e := a.Store.Block(ctx, r.ToBlock)
 	if e != nil {
@@ -134,6 +138,18 @@ func (a *API) GetEvents(ctx context.Context, r Range) ([]model.Event, error) {
 	if e := a.checkRange(ctx, r); e != nil {
 		return nil, e
 	}
+	v, e := a.loadEvents(ctx, r)
+	if e != nil {
+		return nil, e
+	}
+	if e = a.checkRange(ctx, r); e != nil {
+		return nil, e
+	}
+	return v, nil
+}
+
+// loadEvents retains event caps while callers own the before/after anchor checks.
+func (a *API) loadEvents(ctx context.Context, r Range) ([]model.Event, error) {
 	v, e := a.Store.Events(ctx, r.FromBlock, r.ToBlock, 10000)
 	if e != nil {
 		return nil, e
@@ -142,9 +158,6 @@ func (a *API) GetEvents(ctx context.Context, r Range) ([]model.Event, error) {
 		return nil, errors.New("range too large; query smaller ranges or getBlock")
 	}
 	if e = checkResponseSize(v); e != nil {
-		return nil, e
-	}
-	if e = a.checkRange(ctx, r); e != nil {
 		return nil, e
 	}
 	return v, nil
@@ -167,14 +180,14 @@ func (a *API) GetUpdates(ctx context.Context, r Range) (*Updates, error) {
 	if len(v) == 10000 {
 		return nil, errors.New("range too large; query smaller ranges or getBlock")
 	}
-	events, e := a.GetCreditTransitions(ctx, r)
+	events, e := a.loadEvents(ctx, r)
 	if e != nil {
 		return nil, e
 	}
 	if e = a.checkRange(ctx, r); e != nil {
 		return nil, e
 	}
-	result := &Updates{r.BlockHash, v, events}
+	result := &Updates{r.BlockHash, v, creditTransitions(events)}
 	if e = checkResponseSize(result); e != nil {
 		return nil, e
 	}
@@ -185,6 +198,10 @@ func (a *API) GetCreditTransitions(ctx context.Context, r Range) ([]model.Event,
 	if e != nil {
 		return nil, e
 	}
+	return creditTransitions(events), nil
+}
+
+func creditTransitions(events []model.Event) []model.Event {
 	out := []model.Event{}
 	for _, v := range events {
 		switch v.Name {
@@ -192,7 +209,7 @@ func (a *API) GetCreditTransitions(ctx context.Context, r Range) ([]model.Event,
 			out = append(out, v)
 		}
 	}
-	return out, nil
+	return out
 }
 
 type Candidate struct {
@@ -230,6 +247,13 @@ func (a *API) DetectOutputs(ctx context.Context, r Range, key hexutil.Bytes) (*D
 	for _, v := range updates.Outputs {
 		if e = ctx.Err(); e != nil {
 			return nil, e
+		}
+		// Deliberately omitted Funds envelopes have no FMD delivery to detect.
+		// Keep them available through getOutputs/getUpdates for commitment lookup.
+		// Credit envelopes are mandatory on chain, so an authenticated empty
+		// pair also identifies Funds change emitted by a Credit operation.
+		if len(v.Ciphertext) == 0 && len(v.Clue) == 0 {
+			continue
 		}
 		a.mu.Lock()
 		p := a.prepared[string(v.Clue)]

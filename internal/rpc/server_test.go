@@ -141,7 +141,7 @@ func TestHTTPStrictRangeAnchors(t *testing.T) {
 	cases := []struct {
 		name string
 		r    Range
-	}{{"no anchor", Range{FromBlock: 8, ToBlock: 10}}, {"reverse", Range{FromBlock: 11, ToBlock: 10, BlockHash: good.BlockHash}}, {"101 blocks", Range{FromBlock: 0, ToBlock: 100, BlockHash: good.BlockHash}}, {"wrong hash", Range{FromBlock: 8, ToBlock: 10, BlockHash: common.HexToHash("ff")}}, {"unknown block", Range{FromBlock: 8, ToBlock: 11, BlockHash: good.BlockHash}}}
+	}{{"no anchor", Range{FromBlock: 8, ToBlock: 10}}, {"reverse", Range{FromBlock: 11, ToBlock: 10, BlockHash: good.BlockHash}}, {"10001 blocks", Range{FromBlock: 0, ToBlock: 10000, BlockHash: good.BlockHash}}, {"wrong hash", Range{FromBlock: 8, ToBlock: 10, BlockHash: common.HexToHash("ff")}}, {"unknown block", Range{FromBlock: 8, ToBlock: 11, BlockHash: good.BlockHash}}}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			f, _ := anchor()
@@ -214,7 +214,19 @@ func TestHTTPDetectionRustVectorAndTransitions(t *testing.T) {
 			f, rng := anchor()
 			f.head.Timestamp = 2678400
 			f.outputs = []model.Output{{Block: *f.head, Commitment: common.HexToHash("01"), Clue: clue}, {Block: *f.head, Commitment: common.HexToHash("02"), Clue: []byte{0xff}}}
+			f.outputs = append(f.outputs, model.Output{Block: *f.head, Kind: "BatchOutputs", Commitment: common.HexToHash("03")})
+			for _, kind := range []string{"Shield", "Transact", "CrossTreeTransact", "CreditCreated", "CreditToppedUp"} {
+				f.outputs = append(f.outputs, model.Output{Block: *f.head, Kind: kind, Commitment: common.HexToHash("04")})
+			}
 			f.events = []model.Event{{Name: "Shield"}, {Block: *f.head, Name: "CreditDraw", Data: json.RawMessage(`{"params":{"remainderCommitments":[]}}`)}, {Name: "CreditCancelled"}}
+			transport := call(t, testServer(t, f, true), "invisi_getUpdates", []any{rng}, "")
+			if transport.Error != nil {
+				t.Fatal(transport.Error)
+			}
+			var updates Updates
+			if err := json.Unmarshal(transport.Result, &updates); err != nil || len(updates.Outputs) != len(f.outputs) {
+				t.Fatalf("no-envelope outputs missing from transport: %s (%v)", transport.Result, err)
+			}
 			r := call(t, testServer(t, f, true), "invisi_detectOutputs", []any{rng, "0x" + tc.key}, "")
 			if r.Error != nil {
 				t.Fatal(r.Error)
@@ -443,4 +455,67 @@ func (f *fakeBackend) ReceivingAddress(context.Context, common.Address) (*model.
 
 func (f *fakeBackend) Broadcasters(context.Context, model.BroadcasterQuery) (*model.BroadcasterPage, error) {
 	return &model.BroadcasterPage{}, nil
+}
+
+func TestHTTPRangeBoundaryAndAnchorReads(t *testing.T) {
+	for _, method := range []string{"invisi_getEvents", "invisi_getCreditTransitions", "invisi_getUpdates"} {
+		t.Run(method, func(t *testing.T) {
+			for _, tc := range []struct {
+				name                string
+				from, to            uint64
+				zeroHash, wantError bool
+			}{
+				{"10000 blocks", 1, 10000, false, false},
+				{"10001 blocks", 0, 10000, false, true},
+				{"reversed", 10001, 10000, false, true},
+				{"zero hash", 1, 10000, true, true},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					f, rng := anchor()
+					f.head.Number = tc.to
+					rng.FromBlock, rng.ToBlock = tc.from, tc.to
+					if tc.zeroHash {
+						rng.BlockHash = common.Hash{}
+					}
+					r := call(t, testServer(t, f, false), method, []any{rng}, "")
+					if (r.Error != nil) != tc.wantError {
+						t.Fatalf("unexpected result: %+v", r)
+					}
+					if tc.wantError {
+						if f.blockReads != 0 || f.eventReads != 0 || f.outputReads != 0 {
+							t.Fatal("invalid range read backend")
+						}
+					} else if f.blockReads != 2 || f.eventReads != 1 {
+						t.Fatalf("anchor reads=%d event reads=%d; want 2 and 1", f.blockReads, f.eventReads)
+					}
+				})
+			}
+			f, rng := anchor()
+			f.reorgAfter = 1
+			r := call(t, testServer(t, f, false), method, []any{rng}, "")
+			if r.Error == nil || !strings.Contains(r.Error.Message, "reorganized") {
+				t.Fatalf("accepted reorg: %+v", r)
+			}
+		})
+	}
+}
+
+func TestHTTPRangeEventCapsBeforeTransitionFilter(t *testing.T) {
+	for _, method := range []string{"invisi_getEvents", "invisi_getCreditTransitions", "invisi_getUpdates"} {
+		for _, kind := range []string{"count", "bytes"} {
+			t.Run(method+"/"+kind, func(t *testing.T) {
+				f, rng := anchor()
+				if kind == "count" {
+					f.events = make([]model.Event, 10000)
+				} else {
+					// Even non-credit events retain their original response-size cap.
+					f.events = []model.Event{{Name: "Shield", Data: json.RawMessage(`"` + strings.Repeat("x", maxRangeResponseBytes) + `"`)}}
+				}
+				r := call(t, testServer(t, f, false), method, []any{rng}, "")
+				if r.Error == nil || !strings.Contains(r.Error.Message, "smaller ranges") {
+					t.Fatalf("accepted oversized event data: %+v", r)
+				}
+			})
+		}
+	}
 }

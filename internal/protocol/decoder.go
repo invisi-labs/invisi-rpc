@@ -176,7 +176,13 @@ func (d *Decoder) Decode(block model.Block, logs []types.Log) (batch model.Batch
 				}
 				size := int(binary.BigEndian.Uint16(p[cursor : cursor+2]))
 				cursor += 2
-				if size < 1 || size > 4096 || len(p)-cursor < size+68 {
+				if size == 0 {
+					if err = add(id, m["startLeafIndex"].(uint32)+uint32(i), c, ts[i], delivery{}); err != nil {
+						return model.Batch{}, err
+					}
+					continue
+				}
+				if size > 4096 || len(p)-cursor < size+68 {
 					return model.Batch{}, fmt.Errorf("BatchOutputs: invalid envelope length")
 				}
 				cipher, clue := p[cursor:cursor+size], p[cursor+size:cursor+size+68]

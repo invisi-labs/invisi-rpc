@@ -27,7 +27,7 @@ func TestReceivingAddressWire(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := call(t, h, "invisi_getReceivingAddress", []any{common.HexToAddress("0x1234").Hex()}, "")
-	if r.Error != nil || !strings.Contains(string(r.Result), `"nonce":"18446744073709551615"`) {
+	if r.Error != nil || !strings.Contains(string(r.Result), `"nonce":"18446744073709551615"`) || !strings.Contains(string(r.Result), `"ownerAddress":"0x0000000000000000000000000000000000001234"`) || strings.Contains(string(r.Result), `"walletIdentity"`) {
 		t.Fatalf("unexpected response: %+v", r)
 	}
 	f.registration = nil

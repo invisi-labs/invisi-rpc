@@ -117,3 +117,29 @@ func TestOpaqueCiphertextBatchIgnoresCodecVersions(t *testing.T) {
 		}
 	}
 }
+
+func TestBatchOutputsWithoutEnvelopePreservePositions(t *testing.T) {
+	d, log := fixture(t)
+	packed := append([]byte{0, 0}, memoSegment(160, 9)...)
+	packed = append(packed, 0, 0)
+	commitments := [][32]byte{{1}, {2}, {3}}
+	l := log("BatchOutputs", 1, common.Hash{}, []any{big.NewInt(2)}, uint32(91), big.NewInt(0), make([]common.Address, 3), commitments, packed)
+	b, err := d.Decode(model.Block{}, []types.Log{l})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(b.Outputs) != 3 {
+		t.Fatalf("lost outputs: %d", len(b.Outputs))
+	}
+	for i, output := range b.Outputs {
+		if output.Commitment != commitments[i] || output.LeafIndex != uint32(91+i) {
+			t.Fatalf("lost position %d", i)
+		}
+		if i != 1 && (len(output.Ciphertext) != 0 || len(output.Clue) != 0) {
+			t.Fatalf("unexpected envelope %d", i)
+		}
+	}
+	if len(b.Outputs[1].Ciphertext) != 160 || len(b.Outputs[1].Clue) != 68 {
+		t.Fatal("lost adjacent encrypted delivery")
+	}
+}
