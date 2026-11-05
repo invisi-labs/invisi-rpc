@@ -167,6 +167,7 @@ CREATE TABLE IF NOT EXISTS invisi_nodes (
  PRIMARY KEY(deployment,tree_id,level,node_index,leaf_count), FOREIGN KEY(deployment,tree_id) REFERENCES invisi_trees ON DELETE CASCADE,
  FOREIGN KEY(deployment,block_number) REFERENCES invisi_blocks ON DELETE CASCADE
 );
+CREATE INDEX IF NOT EXISTS invisi_commitment_lookup ON invisi_nodes(deployment,hash) WHERE level=0;
 CREATE TABLE IF NOT EXISTS invisi_nullifiers (
  deployment TEXT NOT NULL, hash BLOB NOT NULL, block_number INTEGER NOT NULL,
  PRIMARY KEY(deployment,hash), FOREIGN KEY(deployment,block_number) REFERENCES invisi_blocks ON DELETE CASCADE
@@ -471,10 +472,20 @@ func (s *SQLiteStore) Membership(ctx context.Context, treeID uint64, index uint3
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
+	m, err := s.membership(ctx, tx, treeID, index, root)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+func (s *SQLiteStore) membership(ctx context.Context, tx sqliteQuerier, treeID uint64, index uint32, root common.Hash) (*model.Membership, error) {
 	m := &model.Membership{LeafIndex: index}
 	m.Root.TreeID = treeID
 	var h, p, blockJSON []byte
-	err = tx.QueryRow(ctx, "SELECT r.leaf_count,b.number,b.hash,b.parent_hash,b.batch->'block' FROM invisi_roots r JOIN invisi_blocks b ON b.deployment=r.deployment AND b.number=r.block_number WHERE r.deployment=?1 AND r.tree_id=?2 AND r.root=?3 ORDER BY r.leaf_count DESC LIMIT 1", s.key, treeID, root[:]).Scan(&m.Root.LeafCount, &m.Root.Block.Number, &h, &p, &blockJSON)
+	err := tx.QueryRow(ctx, "SELECT r.leaf_count,b.number,b.hash,b.parent_hash,b.batch->'block' FROM invisi_roots r JOIN invisi_blocks b ON b.deployment=r.deployment AND b.number=r.block_number WHERE r.deployment=?1 AND r.tree_id=?2 AND r.root=?3 ORDER BY r.leaf_count DESC LIMIT 1", s.key, treeID, root[:]).Scan(&m.Root.LeafCount, &m.Root.Block.Number, &h, &p, &blockJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -505,9 +516,6 @@ func (s *SQLiteStore) Membership(ctx context.Context, treeID uint64, index uint3
 		return nil, errors.New("missing commitment")
 	}
 	m.Commitment = leaf
-	if err = tx.Commit(ctx); err != nil {
-		return nil, err
-	}
 	return m, nil
 }
 func (s *SQLiteStore) Events(ctx context.Context, from, to uint64, limit int) ([]model.Event, error) {

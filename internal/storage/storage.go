@@ -489,10 +489,20 @@ func (s *Store) Membership(ctx context.Context, treeID uint64, index uint32, roo
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
+	m, err := s.membership(ctx, tx, treeID, index, root)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+func (s *Store) membership(ctx context.Context, tx pgx.Tx, treeID uint64, index uint32, root common.Hash) (*model.Membership, error) {
 	m := &model.Membership{LeafIndex: index}
 	m.Root.TreeID = treeID
 	var h, p, blockJSON []byte
-	err = tx.QueryRow(ctx, "SELECT r.leaf_count,b.number,b.hash,b.parent_hash,b.batch->'block' FROM invisi_roots r JOIN invisi_blocks b ON b.deployment=r.deployment AND b.number=r.block_number WHERE r.deployment=$1 AND r.tree_id=$2 AND r.root=$3 ORDER BY r.leaf_count DESC LIMIT 1", s.key, treeID, root[:]).Scan(&m.Root.LeafCount, &m.Root.Block.Number, &h, &p, &blockJSON)
+	err := tx.QueryRow(ctx, "SELECT r.leaf_count,b.number,b.hash,b.parent_hash,b.batch->'block' FROM invisi_roots r JOIN invisi_blocks b ON b.deployment=r.deployment AND b.number=r.block_number WHERE r.deployment=$1 AND r.tree_id=$2 AND r.root=$3 ORDER BY r.leaf_count DESC LIMIT 1", s.key, treeID, root[:]).Scan(&m.Root.LeafCount, &m.Root.Block.Number, &h, &p, &blockJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -523,9 +533,6 @@ func (s *Store) Membership(ctx context.Context, treeID uint64, index uint32, roo
 		return nil, errors.New("missing commitment")
 	}
 	m.Commitment = leaf
-	if err = tx.Commit(ctx); err != nil {
-		return nil, err
-	}
 	return m, nil
 }
 func (s *Store) Events(ctx context.Context, from, to uint64, limit int) ([]model.Event, error) {

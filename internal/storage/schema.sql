@@ -41,3 +41,5 @@ CREATE TABLE IF NOT EXISTS invisi_broadcaster_profiles (deployment text PRIMARY 
 
 CREATE TABLE IF NOT EXISTS invisi_broadcaster_formats (deployment text PRIMARY KEY, version integer NOT NULL);
 CREATE UNIQUE INDEX IF NOT EXISTS invisi_broadcaster_positions ON invisi_broadcasters(deployment,block_number,log_index);
+
+CREATE INDEX IF NOT EXISTS invisi_commitment_lookup ON invisi_nodes(deployment,hash) WHERE level=0;

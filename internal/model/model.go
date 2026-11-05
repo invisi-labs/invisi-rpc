@@ -173,3 +173,10 @@ func (b *Batch) UnmarshalJSON(data []byte) error {
 	*b = Batch(value)
 	return nil
 }
+
+// NoteLookup binds an indexed output to a membership proof from one storage snapshot.
+// It makes no claim about spending authority or nullifier status.
+type NoteLookup struct {
+	Output     Output     `json:"output"`
+	Membership Membership `json:"membership"`
+}

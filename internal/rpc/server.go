@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	gethrpc "github.com/ethereum/go-ethereum/rpc"
@@ -24,6 +25,7 @@ type Backend interface {
 	Batch(context.Context, uint64) (*model.Batch, error)
 	Roots(context.Context, uint64, int) ([]model.Root, error)
 	Membership(context.Context, uint64, uint32, common.Hash) (*model.Membership, error)
+	Note(context.Context, common.Hash, uint64) (*model.NoteLookup, error)
 	Events(context.Context, uint64, uint64, int) ([]model.Event, error)
 	Outputs(context.Context, uint64, uint64, int) ([]model.Output, error)
 	IsSpent(context.Context, common.Hash) (bool, error)
@@ -98,6 +100,38 @@ func (a *API) GetRoots(ctx context.Context, treeID uint64) ([]model.Root, error)
 func (a *API) GetMembership(ctx context.Context, treeID uint64, index uint32, root common.Hash) (*model.Membership, error) {
 	return a.Store.Membership(ctx, treeID, index, root)
 }
+
+// GetNote returns an output and membership at or before the requested block.
+// Clients must authenticate the returned root independently against the chain.
+func (a *API) GetNote(ctx context.Context, commitment common.Hash, atBlock uint64) (*model.NoteLookup, error) {
+	var scalar fr.Element
+	if commitment == (common.Hash{}) {
+		return nil, errors.New("nonzero commitment required")
+	}
+	if err := scalar.SetBytesCanonical(commitment[:]); err != nil {
+		return nil, errors.New("canonical commitment required")
+	}
+	block, err := a.Store.Block(ctx, atBlock)
+	if err != nil {
+		return nil, err
+	}
+	if block == nil {
+		return nil, errors.New("requested block is not indexed")
+	}
+	result, err := a.Store.Note(ctx, commitment, atBlock)
+	if err != nil {
+		return nil, err
+	}
+	current, err := a.Store.Block(ctx, atBlock)
+	if err != nil {
+		return nil, err
+	}
+	if current == nil || current.Hash != block.Hash {
+		return nil, errors.New("note lookup anchor reorganized; retry lookup")
+	}
+	return result, nil
+}
+
 func (a *API) IsSpent(ctx context.Context, nullifier common.Hash) (bool, error) {
 	return a.Store.IsSpent(ctx, nullifier)
 }

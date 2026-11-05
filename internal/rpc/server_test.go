@@ -519,3 +519,28 @@ func TestHTTPRangeEventCapsBeforeTransitionFilter(t *testing.T) {
 		}
 	}
 }
+
+func (f *fakeBackend) Note(context.Context, common.Hash, uint64) (*model.NoteLookup, error) {
+	return nil, nil
+}
+
+func TestNoteLookupRPC(t *testing.T) {
+	f := &fakeBackend{head: &model.Block{Number: 10, Hash: common.HexToHash("10")}}
+	h := testServer(t, f, false)
+	if r := call(t, h, "invisi_getNote", []any{common.HexToHash("1"), 10}, ""); r.Error != nil || string(r.Result) != "null" {
+		t.Fatalf("missing note: %+v", r)
+	}
+	if r := call(t, h, "invisi_getNote", []any{common.Hash{}, 10}, ""); r.Error == nil {
+		t.Fatal("zero commitment accepted")
+	}
+	if r := call(t, h, "invisi_getNote", []any{common.HexToHash("1"), 9}, ""); r.Error == nil {
+		t.Fatal("unindexed anchor accepted")
+	}
+	if r := call(t, h, "invisi_getNote", []any{common.HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"), 10}, ""); r.Error == nil {
+		t.Fatal("noncanonical commitment accepted")
+	}
+	f.reorgAfter = f.blockReads + 1
+	if r := call(t, h, "invisi_getNote", []any{common.HexToHash("1"), 10}, ""); r.Error == nil {
+		t.Fatal("reorganized anchor accepted")
+	}
+}

@@ -171,6 +171,7 @@ POST JSON-RPC 2.0 to `/v1/chains/<chainId>` using positional parameter arrays. `
 | `invisi_getBlock` | `[blockNumber]` | Complete indexed block, raw logs and normalized data |
 | `invisi_getEvents` | `[range]` | Events in canonical log order |
 | `invisi_getRoots` | `[treeId]` | Up to 10,000 recent recorded roots, newest first |
+| `invisi_getNote` | `[commitment, atBlock]` | Indexed output and Merkle membership from one snapshot; `null` if not found at or before the indexed block |
 | `invisi_getMembership` | `[treeId, leafIndex, root]` | Commitment, 16 siblings and historical anchor |
 | `invisi_getReceivingAddress` | `[ownerAddress]` | Indexed registered public keys and nonce with the indexed block reference; `null` if unregistered |
 | `invisi_isSpent` | `[nullifier]` | Consumption through the indexed head |
@@ -178,6 +179,8 @@ POST JSON-RPC 2.0 to `/v1/chains/<chainId>` using positional parameter arrays. `
 | `invisi_getTransactionUpdates` | `[transactionHash]` | One transaction’s indexed outputs and Credit transitions, with explicit availability status |
 | `invisi_getCreditTransitions` | `[range]` | Credit creation, draw, cancellation and top-up |
 | `invisi_detectOutputs` | `[range, detectionKey]` | FMD candidates and Credit transitions |
+
+`invisi_getNote` uses a deployment-scoped commitment index, including outputs without an encrypted envelope. The requested `atBlock` must be indexed. The result is `{ output, membership }`, using the existing output schema and membership schema (`anchor`, `leafIndex`, `commitment`, `siblings`). The newest recorded root at or before `atBlock` is selected. Output metadata and the proof are read in one database snapshot; reorganized query anchors return an error. A null result means absent from the current index snapshot, not proof of absence from the chain. The response does not establish ownership or spent status. Clients must recompute the Note commitment, verify the Merkle path, independently authenticate the root against the Protocol on a trusted chain node, and query the derived nullifier when checking spendability. No nonce or private Note data is sent to this endpoint.
 
 A range is `{ "fromBlock": 100, "toBlock": 110, "blockHash": "0x…" }`. The hash must match indexed `toBlock`, obtained through `getBlock` or `getStatus`. Queries accept at most 10,000 blocks (the inclusive `rpc.MaxUpdateBlocks` limit) and 10,000 results; overflow returns an error. Use smaller ranges or full blocks. Reorganizations invalidate old anchors; recheck when combining responses.
 
