@@ -165,6 +165,9 @@ POST JSON-RPC 2.0 with positional parameter arrays to `/v1/chains/<chainId>`. `G
 | --- | --- | --- |
 | `invisi_getVersion` | `[]` | API and Protocol versions |
 | `invisi_getDeployment` | `[]` | Pinned public deployment profile |
+| `invisi_getSettlementOperations` | `[{fromBlock?, toBlock?, limit, cursor?}]` | Canonical public logical operation page |
+| `invisi_getProtocolTransactions` | `[{fromBlock?, toBlock?, limit, cursor?}]` | Same logical-operation page including supported direct failures |
+| `invisi_getTransactionOperations` | `[transactionHash]` | Receipt availability and authenticated logical operations |
 | `invisi_getStatus` | `[]` | Deployment and indexed head |
 | `invisi_getBlock` | `[blockNumber]` | Low-level complete indexed block and raw logs |
 | `invisi_getEvents` | `[range]` | Low-level canonical events |
@@ -320,3 +323,15 @@ register services, change their data or call their endpoints.
 Snapshots use the `invisi-protocol-v1-postpaid-credit-typed` source profile and pin all three
 ABIs and configured deployments. Earlier snapshot profiles must be rebuilt/exported with the
 current indexer. This does not change on-chain Protocol VERSION 1.
+
+## Canonical settlement facts
+
+The three operation methods are independent chain-fact APIs. They do not assess funding provenance or combine the existing Note/Credit query methods. `invisi_getProtocolTransactions` returns the same logical-operation page as `invisi_getSettlementOperations`; consumers group `txHash` when presenting transaction rows.
+
+A page query uses numeric block bounds and `limit` from 1 through 100. Omitted `toBlock` freezes the current indexed head. Responses contain `operations`, `snapshot:{blockNumber,blockHash}`, `indexedHead:{blockNumber,blockHash}`, optional `nextCursor`, and `indirectFailureDiscovery:"unsupported_without_traces"`. An opaque continuation binds chain, Protocol, fixed snapshot, range and logical offset. Follow the cursor even after an empty page; omit block bounds on continuation. Any missing indexed block, upstream failure, deployment mismatch or changed canonical snapshot returns an error. This implementation replays the existing indexed block/log data against canonical chain blocks, with no second persistent index or schema migration. Each page scans at most 16 blocks and 256 relevant receipts; a block exceeding the receipt budget returns an explicit capacity error rather than partial success.
+
+Each public operation includes decimal-string `chainId/blockNumber/timestamp/operationIndex/memberIndex/logIndex/mainCircuitCapacity`, block and transaction hashes, `kind/tokenAddress`, separate `noteNullifiers/creditNullifiers`, separate `noteOutputs/creditOutputs`, `grantRefs`, gross `funding:[{payer,tokenAddress,amount}]`, withdrawal/fee fields, `success`, and `operationDigest`. Output locations use `noteCommitment/treeId/leafIndex`; amounts are absent unless public on chain. Credit outputs remain typed authority state and never ordinary Notes. No private opening or witness is accepted.
+
+Direct calldata is decoded with an exact generated-ABI round trip. Aggregate members retain their native capacity and original ordering. A transact digest is Keccak256 of `abi.encode(string("Invisi.Provenance.Operation.v1"),uint64(chainId),address(protocol),uint8(2),uint32(C),bytes32[] publicInputs)`, with the actual ordered `17+3*C` words including wallet authorization. The codec, source-authenticated ABI generator and independent ethers vectors live in `internal/settlement`. BatchRequest native capacity and statement hash, typed output insertions, fee accrual, and actual ERC20 funding receipts are cross-checked. Same-token/same-payer pooled pulls are allocated by the authenticated ordered member requests, never by `tx.from`.
+
+A transaction lookup returns `not_found`, `pending_index`, `failed`, or `indexed`, with receipt success separate from indexing availability. Read-only full block discovery includes direct reverted Protocol transactions. Indirect successful calls with Protocol logs and indirect failed hash lookups report `indirect_call_attribution_requires_traces`; their statement, payer and outputs are not guessed. Reverted indirect calls cannot be discovered as a complete list without traces. Unsupported selectors or unauthenticated funding receipts carry an explicit `unsupportedReason`; a consumer must not recognize such operations. This is a bounded replay capability, not a claim of complete trace-backed historical discovery.
