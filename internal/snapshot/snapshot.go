@@ -25,7 +25,7 @@ import (
 const (
 	FormatVersion                     = 2
 	SourceProfile                     = "invisi-protocol-v1-postpaid-credit-typed"
-	ABIHash                           = "aa5434f4cf65d90cd89120c9860a4ddc0fcf4e5036d4041b6f2ca2682358e418"
+	ABIHash                           = "b0eb65498a50753ab8e0e72c415fbed1afc08011e689e9d946d19f1b85d1b14e"
 	DefaultMaxDecompressedBytes int64 = 8 << 30
 	MaxRecordBytes                    = 64 << 20
 )

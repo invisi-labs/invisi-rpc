@@ -34,6 +34,22 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+func TestShieldFixtureUsesCanonicalABI(t *testing.T) {
+	pinned, err := os.ReadFile("testdata/shield.abi.json")
+	must(t, err)
+	a, err := abi.JSON(bytes.NewReader(pinned))
+	must(t, err)
+	p := shieldParams{Token: common.HexToAddress("1"), NoteCommitments: [][32]byte{{2}}, Deadline: big.NewInt(100), FeeAmount: new(big.Int)}
+	f := fundingParams{Amount: big.NewInt(1), SigNonce: new(big.Int), Deadline: new(big.Int), Permit: tokenPermit{Deadline: new(big.Int)}}
+	data, err := a.Pack("shield", p, []shieldOutput{{Amount: big.NewInt(1)}}, []delivery{{Ciphertext: []byte{1}}}, f)
+	must(t, err)
+	if len(data) < 4 || !bytes.Equal(data[:4], a.Methods["shield"].ID) {
+		t.Fatal("invalid canonical Shield fixture")
+	}
+	_, err = a.Methods["shield"].Inputs.Unpack(data[4:])
+	must(t, err)
+}
+
 func TestLocalChainPostgresLifecycle(t *testing.T) {
 	chainURL, databaseURL := os.Getenv("TEST_CHAIN_RPC_URL"), os.Getenv("TEST_DATABASE_URL")
 	if chainURL == "" || databaseURL == "" {
@@ -65,7 +81,7 @@ func TestLocalChainPostgresLifecycle(t *testing.T) {
 	must(t, err)
 	protocolAddress := common.HexToAddress(env("TEST_PROTOCOL_ADDRESS", local.Protocol.Hex()))
 	token := common.HexToAddress(env("TEST_TOKEN_ADDRESS", "0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6"))
-	pinned, err := os.ReadFile("../protocol/InvisiProtocol.abi")
+	pinned, err := os.ReadFile("testdata/shield.abi.json")
 	must(t, err)
 	contractABI, err := abi.JSON(bytes.NewReader(pinned))
 	must(t, err)
@@ -195,7 +211,7 @@ func TestLocalChainPostgresLifecycle(t *testing.T) {
 			ciphertext[157] = byte(seed + uint64(n))
 			deliveries[n] = delivery{ciphertext, clue}
 		}
-		params := shieldParams{token, commitments, new(big.Int).SetUint64(header.Time + 3600)}
+		params := shieldParams{Token: token, NoteCommitments: commitments, Deadline: new(big.Int).SetUint64(header.Time + 3600), FeeAmount: new(big.Int)}
 		funding := fundingParams{Payer: accounts[0], Amount: big.NewInt(3), SigNonce: new(big.Int), Deadline: new(big.Int), Signature: []byte{}, Permit: tokenPermit{Deadline: new(big.Int)}}
 		data, e := contractABI.Pack("shield", params, outputs, deliveries, funding)
 		must(t, e)
@@ -316,9 +332,11 @@ func TestLocalChainPostgresLifecycle(t *testing.T) {
 }
 
 type shieldParams struct {
-	Token             common.Address
-	OutputCommitments [][32]byte
-	Deadline          *big.Int
+	Token           common.Address
+	NoteCommitments [][32]byte
+	Deadline        *big.Int
+	FeeRecipient    common.Address
+	FeeAmount       *big.Int
 }
 type shieldOutput struct {
 	Identity [32]byte

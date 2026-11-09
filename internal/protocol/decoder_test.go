@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"encoding/json"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -65,6 +66,13 @@ func TestBatchOutputsPackedDeliveries(t *testing.T) {
 	}
 	if len(b.Insertions) != 1 || len(b.Outputs) != 2 || len(b.Outputs[0].Ciphertext) != 160 || b.Outputs[0].Clue[0] != 9 || b.Outputs[1].Ciphertext[1] != 7 {
 		t.Fatal("incorrect packed delivery split")
+	}
+	var data map[string]json.RawMessage
+	if err := json.Unmarshal(b.Events[0].Data, &data); err != nil {
+		t.Fatal(err)
+	}
+	if len(data["noteCommitments"]) == 0 || len(data["commitments"]) != 0 {
+		t.Fatal("BatchOutputs must name ordinary Note commitments explicitly")
 	}
 	bad := log("BatchOutputs", 1, tx, []any{big.NewInt(1)}, uint32(2), big.NewInt(0), []common.Address{{1}}, [][32]byte{{1}, {2}}, p)
 	if _, err = d.Decode(model.Block{}, []types.Log{bad}); err == nil {

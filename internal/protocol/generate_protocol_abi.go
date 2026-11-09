@@ -52,6 +52,25 @@ func main() {
 	encoded, e := json.MarshalIndent(events, "", "  ")
 	must(e)
 	must(os.WriteFile("InvisiProtocol.abi", append(encoded, '\n'), 0644))
+	shield := []json.RawMessage{}
+	for _, entry := range artifact.ABI {
+		var item struct {
+			Type string `json:"type"`
+			Name string `json:"name"`
+		}
+		must(json.Unmarshal(entry, &item))
+		if item.Type == "function" && item.Name == "shield" {
+			shield = append(shield, entry)
+		}
+	}
+	if len(shield) != 1 {
+		panic("canonical shield function missing or ambiguous")
+	}
+	encoded, e = json.MarshalIndent(shield, "", "  ")
+	must(e)
+	fixtureDirectory := filepath.Join("..", "integration", "testdata")
+	must(os.MkdirAll(fixtureDirectory, 0755))
+	must(os.WriteFile(filepath.Join(fixtureDirectory, "shield.abi.json"), append(encoded, '\n'), 0644))
 	head, e := exec.Command("git", "-C", root, "rev-parse", "HEAD").Output()
 	must(e)
 	sourceStatus, e := exec.Command("git", "-C", root, "status", "--porcelain", "--", "contracts/src").Output()

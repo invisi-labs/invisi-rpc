@@ -28,7 +28,7 @@
         "internalType": "address[]"
       },
       {
-        "name": "commitments",
+        "name": "noteCommitments",
         "type": "bytes32[]",
         "indexed": false,
         "internalType": "bytes32[]"
@@ -389,7 +389,7 @@
             "internalType": "bytes32[]"
           },
           {
-            "name": "stateCommitments",
+            "name": "creditCommitments",
             "type": "bytes32[]",
             "internalType": "bytes32[]"
           },
@@ -649,7 +649,7 @@
         "internalType": "bytes32[]"
       },
       {
-        "name": "outputCommitments",
+        "name": "noteCommitments",
         "type": "bytes32[]",
         "indexed": false,
         "internalType": "bytes32[]"
@@ -909,7 +909,7 @@
         "internalType": "bytes32[]"
       },
       {
-        "name": "outputCommitments",
+        "name": "noteCommitments",
         "type": "bytes32[]",
         "indexed": false,
         "internalType": "bytes32[]"

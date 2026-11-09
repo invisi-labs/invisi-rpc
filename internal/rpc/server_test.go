@@ -218,7 +218,7 @@ func TestHTTPDetectionRustVectorAndTransitions(t *testing.T) {
 			for _, kind := range []string{"Shield", "Transact", "CrossTreeTransact"} {
 				f.outputs = append(f.outputs, model.NoteOutput{Block: *f.head, Kind: kind, Commitment: common.HexToHash("04")})
 			}
-			f.events = []model.Event{{Name: "Shield"}, {Block: *f.head, Name: "CreditDraw", Data: json.RawMessage(`{"params":{"stateCommitments":[]}}`)}, {Name: "CreditRevoked"}}
+			f.events = []model.Event{{Name: "Shield"}, {Block: *f.head, Name: "CreditDraw", Data: json.RawMessage(`{"params":{"creditCommitments":[]}}`)}, {Name: "CreditRevoked"}}
 			transport := call(t, testServer(t, f, true), "invisi_getNoteUpdates", []any{rng}, "")
 			if transport.Error != nil {
 				t.Fatal(transport.Error)
@@ -420,7 +420,7 @@ func TestCreditEndpointsPreserveConfirmedBlockContext(t *testing.T) {
 	f, rng := anchor()
 	b := *f.head
 	b.Timestamp = 2678400
-	f.events = []model.Event{{Block: b, Name: "CreditDraw", Data: json.RawMessage(`{"params":{"stateCommitments":[]}}`)}}
+	f.events = []model.Event{{Block: b, Name: "CreditDraw", Data: json.RawMessage(`{"params":{"creditCommitments":[]}}`)}}
 	f.outputs = []model.NoteOutput{{Block: b, Kind: "CreditDraw", Ciphertext: bytes.Repeat([]byte{5}, 754), Clue: []byte{255}}}
 	h := testServer(t, f, true)
 	for _, method := range []string{"invisi_getCreditTransitions"} {

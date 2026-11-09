@@ -133,7 +133,11 @@ func (d *Decoder) Decode(block model.Block, logs []types.Log) (batch model.Batch
 				return model.Batch{}, x
 			}
 			start := m["startLeafIndex"].(uint32)
-			cs := hashes(m["commitments"])
+			commitments := m["commitments"]
+			if e.Name == "BatchOutputs" {
+				commitments = m["noteCommitments"]
+			}
+			cs := hashes(commitments)
 			if len(cs) == 0 || uint64(start)+uint64(len(cs)) > 65536 {
 				return model.Batch{}, fmt.Errorf("%s: invalid insertion range", e.Name)
 			}
@@ -164,7 +168,7 @@ func (d *Decoder) Decode(block model.Block, logs []types.Log) (batch model.Batch
 			if x != nil {
 				return model.Batch{}, x
 			}
-			cs := hashes(m["commitments"])
+			cs := hashes(m["noteCommitments"])
 			ts := m["tokens"].([]common.Address)
 			p := m["packedDeliveries"].([]byte)
 			if len(ts) != len(cs) {
@@ -225,7 +229,7 @@ func (d *Decoder) Decode(block model.Block, logs []types.Log) (batch model.Batch
 			if x != nil {
 				return model.Batch{}, x
 			}
-			cs := hashes(m["outputCommitments"])
+			cs := hashes(m["noteCommitments"])
 			ls := m["leafIndices"].([]uint32)
 			vs := tuple[[]delivery](m["deliveries"])
 			if len(cs) != len(ls) || len(cs) != len(vs) {
@@ -266,7 +270,7 @@ func (d *Decoder) Decode(block model.Block, logs []types.Log) (batch model.Batch
 			p := fields(m["params"])
 			ns := hashes(p["nullifiers"])
 			batch.CreditNullifiers = append(batch.CreditNullifiers, ns...)
-			cs := hashes(p["stateCommitments"])
+			cs := hashes(p["creditCommitments"])
 			ls := m["leafIndices"].([]uint32)
 			vs := tuple[[]delivery](m["deliveries"])
 			n := len(cs)
