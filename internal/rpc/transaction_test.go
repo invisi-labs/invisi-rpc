@@ -62,13 +62,13 @@ func transactionFixture(t *testing.T) (*API, *transactionBackend, *transactionCh
 func TestTransactionUpdatesFilterAndHTTP(t *testing.T) {
 	api, store, _, tx := transactionFixture(t)
 	other := common.HexToHash("0x99")
-	store.batch.Outputs = []model.Output{{TransactionHash: other}, {TransactionHash: tx, LogIndex: 2, Block: store.batch.Block}}
+	store.batch.Outputs = []model.NoteOutput{{TransactionHash: other}, {TransactionHash: tx, LogIndex: 2, Block: store.batch.Block}}
 	store.batch.Events = []model.Event{{TransactionHash: tx, Name: "Unrelated"}, {TransactionHash: other, Name: "CreditDraw"}, {TransactionHash: tx, Name: "CreditDraw", LogIndex: 3, Block: store.batch.Block}}
 	h, err := HTTPHandler(api)
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := call(t, h, "invisi_getTransactionUpdates", []any{tx.Hex()}, "")
+	r := call(t, h, "invisi_getTransactionNoteUpdates", []any{tx.Hex()}, "")
 	if r.Error != nil {
 		t.Fatal(r.Error)
 	}
@@ -76,7 +76,7 @@ func TestTransactionUpdatesFilterAndHTTP(t *testing.T) {
 	if err := json.Unmarshal(r.Result, &decoded); err != nil || decoded.Status != "indexed" || len(decoded.Outputs) != 1 {
 		t.Fatalf("invalid wire response: %s (%v)", r.Result, err)
 	}
-	result, err := api.GetTransactionUpdates(context.Background(), tx)
+	result, err := api.transactionUpdates(context.Background(), tx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestTransactionUpdatesFilterAndHTTP(t *testing.T) {
 		t.Fatal("performed range queries")
 	}
 	for _, bad := range []any{"0x1234", "not-a-hash", common.Hash{}.Hex()} {
-		if call(t, h, "invisi_getTransactionUpdates", []any{bad}, "").Error == nil {
+		if call(t, h, "invisi_getTransactionNoteUpdates", []any{bad}, "").Error == nil {
 			t.Fatal("accepted invalid transaction hash")
 		}
 	}
@@ -117,7 +117,7 @@ func TestTransactionUpdatesStates(t *testing.T) {
 				store.head = nil
 				expected = "pending_index"
 			}
-			result, err := api.GetTransactionUpdates(context.Background(), tx)
+			result, err := api.transactionUpdates(context.Background(), tx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -155,7 +155,7 @@ func TestTransactionUpdatesRejectUntrustedOrFailedReads(t *testing.T) {
 			case "missing_reader":
 				api.Transactions = nil
 			}
-			if _, err := api.GetTransactionUpdates(context.Background(), tx); err == nil {
+			if _, err := api.transactionUpdates(context.Background(), tx); err == nil {
 				t.Fatal("accepted inconsistent transaction query")
 			}
 		})
@@ -164,11 +164,11 @@ func TestTransactionUpdatesRejectUntrustedOrFailedReads(t *testing.T) {
 
 func TestTransactionUpdatesRejectOversizedResponse(t *testing.T) {
 	api, store, _, hash := transactionFixture(t)
-	store.batch.Outputs = make([]model.Output, 1100)
+	store.batch.Outputs = make([]model.NoteOutput, 1100)
 	for i := range store.batch.Outputs {
-		store.batch.Outputs[i] = model.Output{TransactionHash: hash, Block: store.batch.Block, Ciphertext: bytes.Repeat([]byte{1}, 4096)}
+		store.batch.Outputs[i] = model.NoteOutput{TransactionHash: hash, Block: store.batch.Block, Ciphertext: bytes.Repeat([]byte{1}, 4096)}
 	}
-	if result, err := api.GetTransactionUpdates(context.Background(), hash); err == nil || result != nil {
+	if result, err := api.transactionUpdates(context.Background(), hash); err == nil || result != nil {
 		t.Fatal("oversized transaction response was accepted")
 	}
 }

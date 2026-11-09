@@ -83,12 +83,12 @@ func Open(ctx context.Context, url string, deployment model.Deployment) (*Store,
 		err = s.ensureBroadcasterProfile(ctx, tx)
 	}
 	if err == nil {
-		_, err = tx.Exec(ctx, "INSERT INTO invisi_index_formats VALUES($1,2) ON CONFLICT DO NOTHING", s.key)
+		_, err = tx.Exec(ctx, "INSERT INTO invisi_index_formats VALUES($1,3) ON CONFLICT DO NOTHING", s.key)
 	}
 	if err == nil {
 		var version int
 		err = tx.QueryRow(ctx, "SELECT version FROM invisi_index_formats WHERE deployment=$1", s.key).Scan(&version)
-		if err == nil && version != 2 {
+		if err == nil && version != 3 {
 			err = errors.New("unsupported index format; use a fresh database and rebuild the event index")
 		}
 	}
@@ -283,8 +283,24 @@ func (s *Store) apply(ctx context.Context, tx pgx.Tx, b model.Batch) error {
 			}
 		}
 	}
+	gs, e := grants(b)
+	if e != nil {
+		return e
+	}
+	for _, v := range gs {
+		g := v.Grant
+		if _, e = tx.Exec(ctx, "INSERT INTO invisi_credit_grants VALUES($1,$2,$3,$4,$5,$6,$7,$8)", s.key, g.Owner[:], g.Token[:], b.Block.Number, v.Event.LogIndex, v.Event.Name, string(g.Shard), g.Slot); e != nil {
+			return e
+		}
+	}
+
 	for _, n := range b.Nullifiers {
 		if _, err = tx.Exec(ctx, "INSERT INTO invisi_nullifiers VALUES($1,$2,$3)", s.key, n[:], b.Block.Number); err != nil {
+			return err
+		}
+	}
+	for _, n := range b.CreditNullifiers {
+		if _, err = tx.Exec(ctx, "INSERT INTO invisi_credit_nullifiers VALUES($1,$2,$3)", s.key, n[:], b.Block.Number); err != nil {
 			return err
 		}
 	}
@@ -550,14 +566,14 @@ func (s *Store) Events(ctx context.Context, from, to uint64, limit int) ([]model
 	}
 	return out, nil
 }
-func (s *Store) Outputs(ctx context.Context, from, to uint64, limit int) ([]model.Output, error) {
+func (s *Store) Outputs(ctx context.Context, from, to uint64, limit int) ([]model.NoteOutput, error) {
 	raw, err := s.items(ctx, "outputs", from, to, limit)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]model.Output, 0, len(raw))
+	out := make([]model.NoteOutput, 0, len(raw))
 	for _, r := range raw {
-		var e model.Output
+		var e model.NoteOutput
 		if err = json.Unmarshal(r, &e); err != nil {
 			return nil, err
 		}

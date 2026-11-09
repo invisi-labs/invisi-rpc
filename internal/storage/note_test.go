@@ -46,8 +46,8 @@ func TestNoteLookup(t *testing.T) {
 			first := model.Batch{Block: model.Block{Number: 10, Hash: common.HexToHash("10")}, CreatedTrees: []uint64{1}}
 			apply(first)
 			leaf := common.HexToHash("123")
-			output := model.Output{TreeID: 1, LeafIndex: 0, Commitment: leaf, Token: common.HexToAddress("456"), TransactionHash: common.HexToHash("789"), Kind: "Shield"}
-			second := model.Batch{Block: model.Block{Number: 11, Hash: common.HexToHash("11"), ParentHash: first.Block.Hash}, Insertions: []model.Insertion{{TreeID: 1, Commitments: []common.Hash{leaf}}}, Outputs: []model.Output{output}}
+			output := model.NoteOutput{TreeID: 1, LeafIndex: 0, Commitment: leaf, Token: common.HexToAddress("456"), TransactionHash: common.HexToHash("789"), Kind: "Shield"}
+			second := model.Batch{Block: model.Block{Number: 11, Hash: common.HexToHash("11"), ParentHash: first.Block.Hash}, Insertions: []model.Insertion{{TreeID: 1, Commitments: []common.Hash{leaf}}}, Outputs: []model.NoteOutput{output}}
 			apply(second)
 			if v, e := s.Note(ctx, leaf, 10); e != nil || v != nil {
 				t.Fatalf("future note: %v %v", v, e)

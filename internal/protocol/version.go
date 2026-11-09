@@ -14,7 +14,7 @@ import (
 // APIVersion identifies this service's HTTP namespace. Contract VERSION() is a
 // separate on-chain value, read from each configured deployment at startup.
 const SupportedVersion = "1"
-const APIVersion = "v" + SupportedVersion
+const APIVersion = "v1"
 const APIPrefix = "/" + APIVersion
 
 type VersionCaller interface {

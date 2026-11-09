@@ -50,8 +50,13 @@ func TestSnapshotSQLitePostgresSQLite(t *testing.T) {
 	destination, err := storage.OpenSQLite(ctx, filepath.Join(t.TempDir(), "destination.sqlite"), dep)
 	must(t, err)
 	defer destination.Close()
-	first := model.Batch{Block: model.Block{Number: 100, Hash: common.HexToHash("0x100")}, CreatedTrees: []uint64{7}, Insertions: []model.Insertion{{TreeID: 7, Commitments: []common.Hash{common.HexToHash("0x1"), common.HexToHash("0x2")}}}, Outputs: []model.Output{{TreeID: 7, Commitment: common.HexToHash("0x1"), Ciphertext: []byte{1, 2, 3}, Clue: []byte{4, 5, 6}}}, Events: []model.Event{{Name: "Shield", Data: json.RawMessage(`{"amount":3}`)}}, Logs: []types.Log{{Address: dep.Protocol, BlockNumber: 100, BlockHash: common.HexToHash("0x100"), Topics: []common.Hash{common.HexToHash("0x789")}, Data: []byte{1, 2}}}}
+	first := model.Batch{Block: model.Block{Number: 100, Hash: common.HexToHash("0x100")}, CreatedTrees: []uint64{7}, Insertions: []model.Insertion{{TreeID: 7, Commitments: []common.Hash{common.HexToHash("0x1"), common.HexToHash("0x2")}}}, Outputs: []model.NoteOutput{{TreeID: 7, Commitment: common.HexToHash("0x1"), Ciphertext: []byte{1, 2, 3}, Clue: []byte{4, 5, 6}}}, Events: []model.Event{{Name: "Shield", Data: json.RawMessage(`{"amount":3}`)}}, Logs: []types.Log{{Address: dep.Protocol, BlockNumber: 100, BlockHash: common.HexToHash("0x100"), Topics: []common.Hash{common.HexToHash("0x789")}, Data: []byte{1, 2}}}}
 	second := model.Batch{Block: model.Block{Number: 101, Hash: common.HexToHash("0x101"), ParentHash: first.Block.Hash}, Insertions: []model.Insertion{{TreeID: 7, Start: 2, Commitments: []common.Hash{common.HexToHash("0x3")}}}, Nullifiers: []common.Hash{common.HexToHash("0xabc")}}
+	owner, token := common.HexToAddress("1"), common.HexToAddress("2")
+	first.CreditStates = []model.CreditState{{TreeID: 7, LeafIndex: 1, Commitment: common.HexToHash("2"), Deliveries: []model.Delivery{{Ciphertext: []byte{1}}, {Ciphertext: []byte{2}}}}}
+	first.Events = append(first.Events, model.Event{Name: "CreditCreated", LogIndex: 1, Data: json.RawMessage(fmt.Sprintf(`{"owner":%q,"token":%q,"revocationShard":"1","revocationSlot":0}`, owner.Hex(), token.Hex()))})
+	second.CreditNullifiers = []common.Hash{common.HexToHash("def")}
+	second.Events = []model.Event{{Name: "CreditRevoked", LogIndex: 2, Data: json.RawMessage(fmt.Sprintf(`{"owner":%q,"token":%q,"shard":"1","slot":0}`, owner.Hex(), token.Hex()))}}
 	must(t, source.Apply(ctx, first))
 	must(t, source.Apply(ctx, second))
 	originalRoots, err := source.Roots(ctx, 7, 10)
@@ -85,7 +90,10 @@ func TestSnapshotSQLitePostgresSQLite(t *testing.T) {
 				must(t, e)
 				b, e := json.Marshal(got)
 				must(t, e)
-				if string(a) != string(b) {
+				var av, bv any
+				must(t, json.Unmarshal(a, &av))
+				must(t, json.Unmarshal(b, &bv))
+				if !reflect.DeepEqual(av, bv) {
 					t.Fatalf("batch %d changed across backends\n%s\n%s", want.Block.Number, a, b)
 				}
 			}
@@ -99,6 +107,26 @@ func TestSnapshotSQLitePostgresSQLite(t *testing.T) {
 				must(t, e)
 				verifyMembership(t, membership)
 			}
+			credit := backend.(interface {
+				CreditState(context.Context, common.Hash, uint64) (*model.CreditStateLookup, error)
+				ConsumedAt(context.Context, common.Hash, uint64, bool) (bool, error)
+				CreditBitmapAt(context.Context, common.Address, common.Address, string, uint8, uint64) (string, error)
+			})
+			state, e := credit.CreditState(ctx, common.HexToHash("2"), 101)
+			must(t, e)
+			if state == nil || len(state.State.Deliveries) != 2 {
+				t.Fatal("Credit envelopes lost during replay")
+			}
+			used, e := credit.ConsumedAt(ctx, second.CreditNullifiers[0], 101, true)
+			must(t, e)
+			if !used {
+				t.Fatal("Credit consumption lost")
+			}
+			bitmap, e := credit.CreditBitmapAt(ctx, owner, token, "1", 0, 101)
+			must(t, e)
+			if bitmap != "1" {
+				t.Fatal("revocation lost")
+			}
 			spent, e := backend.IsSpent(ctx, second.Nullifiers[0])
 			must(t, e)
 			if !spent {
@@ -108,7 +136,7 @@ func TestSnapshotSQLitePostgresSQLite(t *testing.T) {
 			must(t, e)
 			outputs, e := backend.Outputs(ctx, 100, 101, 10)
 			must(t, e)
-			if len(events) != 1 || len(outputs) != 1 {
+			if len(events) != 3 || len(outputs) != 1 {
 				t.Fatalf("events/outputs lost: %d/%d", len(events), len(outputs))
 			}
 		})

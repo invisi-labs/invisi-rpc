@@ -40,7 +40,7 @@ func TestPostgresAtomicHistoryRollback(t *testing.T) {
 	apply(b10)
 	apply(b10)
 	leaf1, leaf2 := common.HexToHash("0x01"), common.HexToHash("0x02")
-	b11 := model.Batch{Block: model.Block{Number: 11, Hash: common.HexToHash("0x11"), ParentHash: b10.Block.Hash}, Insertions: []model.Insertion{{TreeID: 1, Commitments: []common.Hash{leaf1}}}, Events: []model.Event{{Name: "insert"}}, Outputs: []model.Output{{Commitment: leaf1}}, Nullifiers: []common.Hash{leaf2}}
+	b11 := model.Batch{Block: model.Block{Number: 11, Hash: common.HexToHash("0x11"), ParentHash: b10.Block.Hash}, Insertions: []model.Insertion{{TreeID: 1, Commitments: []common.Hash{leaf1}}}, Events: []model.Event{{Name: "insert"}}, Outputs: []model.NoteOutput{{Commitment: leaf1}}, Nullifiers: []common.Hash{leaf2}}
 	apply(b11)
 	persisted, err := s.Batch(ctx, 11)
 	if err != nil || persisted == nil || len(persisted.Outputs) != 1 || len(persisted.Events) != 1 {
@@ -68,7 +68,7 @@ func TestPostgresAtomicHistoryRollback(t *testing.T) {
 	}
 	b12 := model.Batch{Block: model.Block{Number: 12, Hash: common.HexToHash("0x12"), ParentHash: b11.Block.Hash}, Insertions: []model.Insertion{{TreeID: 1, Start: 1, Commitments: []common.Hash{leaf2}}}}
 	b12.Events = []model.Event{{Name: "second"}}
-	b12.Outputs = []model.Output{{Commitment: leaf2}}
+	b12.Outputs = []model.NoteOutput{{Commitment: leaf2}}
 	apply(b12)
 	if _, e := s.Events(ctx, 10, 12, 1); !errors.Is(e, ErrQueryLimit) {
 		t.Fatalf("event overflow: %v", e)
@@ -277,7 +277,7 @@ func TestPostgresCreditBlockContextAndFormatValidation(t *testing.T) {
 	defer s.pool.Exec(ctx, "DELETE FROM invisi_index_formats WHERE deployment=$1", s.key)
 	defer s.pool.Exec(ctx, "DELETE FROM invisi_deployments WHERE deployment=$1", s.key)
 	defer s.pool.Exec(ctx, "DELETE FROM invisi_blocks WHERE deployment=$1", s.key)
-	b := model.Batch{Block: model.Block{Number: 1, Hash: common.HexToHash("1"), Timestamp: 2678400}, CreatedTrees: []uint64{1}, Events: []model.Event{{Name: "CreditDraw"}}, Outputs: []model.Output{{Kind: "CreditDraw"}}}
+	b := model.Batch{Block: model.Block{Number: 1, Hash: common.HexToHash("1"), Timestamp: 2678400}, CreatedTrees: []uint64{1}, Events: []model.Event{{Name: "CreditDraw"}}, Outputs: []model.NoteOutput{{Kind: "CreditDraw"}}}
 	if err = s.Apply(ctx, b); err != nil {
 		t.Fatal(err)
 	}
@@ -303,7 +303,7 @@ func TestPostgresCreditBlockContextAndFormatValidation(t *testing.T) {
 	if _, err = s.Checkpoint(ctx); err == nil {
 		t.Fatal("accepted current block record missing timestamp")
 	}
-	if _, err = s.pool.Exec(ctx, "UPDATE invisi_index_formats SET version=99 WHERE deployment=$1", s.key); err != nil {
+	if _, err = s.pool.Exec(ctx, "UPDATE invisi_index_formats SET version=2 WHERE deployment=$1", s.key); err != nil {
 		t.Fatal(err)
 	}
 	if invalid, e := Open(ctx, url, dep); e == nil {

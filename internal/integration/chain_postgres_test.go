@@ -242,7 +242,7 @@ func TestLocalChainPostgresLifecycle(t *testing.T) {
 	verifyMembership(t, &rpcMembership)
 	anchor := servicerpc.Range{FromBlock: first.BlockNumber.Uint64(), ToBlock: first.BlockNumber.Uint64(), BlockHash: first.BlockHash}
 	var candidates servicerpc.DetectionResult
-	must(t, detected.CallContext(ctx, &candidates, "invisi_detectOutputs", anchor, hexutil.Bytes(detectionKey)))
+	must(t, detected.CallContext(ctx, &candidates, "invisi_detectNotes", anchor, hexutil.Bytes(detectionKey)))
 	if len(candidates.Candidates) != 2 || candidates.CheckedBits != 24 {
 		t.Fatalf("unexpected detection response: %+v", candidates)
 	}

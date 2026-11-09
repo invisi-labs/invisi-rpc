@@ -23,9 +23,9 @@ import (
 )
 
 const (
-	FormatVersion                     = 1
-	SourceProfile                     = "invisi-protocol-v1-broadcaster-events"
-	ABIHash                           = "0023ad61060212d3829977ce08f1f618210303423c0d800d5d760363ddd52a52"
+	FormatVersion                     = 2
+	SourceProfile                     = "invisi-protocol-v1-postpaid-credit-typed"
+	ABIHash                           = "aa5434f4cf65d90cd89120c9860a4ddc0fcf4e5036d4041b6f2ca2682358e418"
 	DefaultMaxDecompressedBytes int64 = 8 << 30
 	MaxRecordBytes                    = 64 << 20
 )

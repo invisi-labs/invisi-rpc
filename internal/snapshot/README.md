@@ -1,7 +1,7 @@
 # Portable index snapshots
 
 `Export` streams one consistent storage transaction into a gzip-compressed
-newline-delimited JSON file. Each record is a single JSON object. Version 1
+newline-delimited JSON file. Each record is a single JSON object. Version 2
 contains a header, ordered block records, and a footer:
 
 - The header pins the format version, source profile, ABI SHA256,
@@ -50,6 +50,8 @@ and validate the imported checkpoint against the configured chain before serving
 it as canonical data. Configure an offline import without a network root
 validator if the caller requires restore to make no historical RPC requests.
 
-Format 1 includes each canonical block timestamp and binds each event/output candidate to that block. Credit limits recovery derives UTC periods from this timestamp. These historical timestamps inherit the trusted snapshot source/checksum requirement above; a checkpoint hash by itself does not authenticate arbitrary normalized historical records. Block records must contain an explicit uint64 timestamp; missing, null, or out-of-range values are rejected.
+Format 2 includes each canonical block timestamp and binds each event/output candidate to that block. Credit limits recovery derives UTC periods from this timestamp. These historical timestamps inherit the trusted snapshot source/checksum requirement above; a checkpoint hash by itself does not authenticate arbitrary normalized historical records. Block records must contain an explicit uint64 timestamp; missing, null, or out-of-range values are rejected.
 
 Source revisions are release provenance, not snapshot compatibility fields. Container releases record the tagged source commit in the OCI `org.opencontainers.image.revision` label and publish it with the image digest. Snapshot validation is independent of source commit identity.
+
+Format 2 separates ordinary `outputs` from `creditStates`, with both encrypted state deliveries retained per Credit leaf, and records `creditNullifiers` separately from ordinary Note nullifiers. Credit grant history is rebuilt from canonical creation/revocation events during import. The source profile is `invisi-protocol-v1-postpaid-credit-typed`; earlier snapshots are rejected without writing their normalized records. See `docs/index-format.md` for internal format compatibility and local development data handling.

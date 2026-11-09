@@ -452,7 +452,7 @@ func TestRunMultipleChainsRoutesCheckpointsSnapshotsAndRestart(t *testing.T) {
 	if resp.StatusCode != http.StatusOK || discovery.APIVersion != "v1" || len(discovery.Chains) != 2 || discovery.Chains[0].ChainID != "31338" || discovery.Chains[1].ChainID != "31337" || discovery.Chains[0].RPCPath != "/v1/chains/31338" || discovery.Chains[0].ProtocolVersion != "1" || discovery.Chains[1].ProtocolVersion != "1" {
 		t.Fatalf("unstable discovery response %+v", discovery)
 	}
-	for _, path := range []string{"/", "/chains/31337", "/v3", "/v3/chains/31337", "/v1/chains/999", "/v1/chains/31337/extra", "/v1/chains/31337//"} {
+	for _, path := range []string{"/", "/v2", "/v2/chains/31337", "/chains/31337", "/v3", "/v3/chains/31337", "/v1/chains/999", "/v1/chains/31337/extra", "/v1/chains/31337//"} {
 		r, err := client.Get("http://" + cfg.Listen + path)
 		if err != nil {
 			t.Fatal(err)

@@ -122,12 +122,12 @@ func OpenSQLite(ctx context.Context, path string, d model.Deployment) (*SQLiteSt
 		e = s.ensureBroadcasterProfile(ctx, tx)
 	}
 	if e == nil {
-		_, e = tx.Exec(ctx, "INSERT INTO invisi_index_formats VALUES(?1,2) ON CONFLICT DO NOTHING", s.key)
+		_, e = tx.Exec(ctx, "INSERT INTO invisi_index_formats VALUES(?1,3) ON CONFLICT DO NOTHING", s.key)
 	}
 	if e == nil {
 		var version int
 		e = tx.QueryRow(ctx, "SELECT version FROM invisi_index_formats WHERE deployment=?1", s.key).Scan(&version)
-		if e == nil && version != 2 {
+		if e == nil && version != 3 {
 			e = errors.New("unsupported index format; use a fresh database and rebuild the event index")
 		}
 	}
@@ -174,6 +174,18 @@ CREATE TABLE IF NOT EXISTS invisi_nullifiers (
 );
 CREATE TABLE IF NOT EXISTS invisi_deployments (
  deployment TEXT PRIMARY KEY, from_block INTEGER NOT NULL, runtime_code_hash BLOB NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS invisi_credit_grants (
+ deployment text NOT NULL, owner blob NOT NULL, token blob NOT NULL, block_number bigint NOT NULL, log_index bigint NOT NULL,
+ kind text NOT NULL, shard text NOT NULL, slot integer NOT NULL,
+ PRIMARY KEY(deployment,block_number,log_index), FOREIGN KEY(deployment,block_number) REFERENCES invisi_blocks ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS invisi_credit_grant_lookup ON invisi_credit_grants(deployment,owner,token,kind,block_number,log_index);
+
+CREATE TABLE IF NOT EXISTS invisi_credit_nullifiers (
+ deployment TEXT NOT NULL, hash BLOB NOT NULL, block_number INTEGER NOT NULL,
+ PRIMARY KEY(deployment,hash), FOREIGN KEY(deployment,block_number) REFERENCES invisi_blocks ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS invisi_index_formats (deployment TEXT PRIMARY KEY, version INTEGER NOT NULL);
@@ -356,8 +368,24 @@ func (s *SQLiteStore) apply(ctx context.Context, tx *sqliteTx, b model.Batch) er
 			}
 		}
 	}
+	gs, e := grants(b)
+	if e != nil {
+		return e
+	}
+	for _, v := range gs {
+		g := v.Grant
+		if _, e = tx.Exec(ctx, "INSERT INTO invisi_credit_grants VALUES(?1,?2,?3,?4,?5,?6,?7,?8)", s.key, g.Owner[:], g.Token[:], b.Block.Number, v.Event.LogIndex, v.Event.Name, string(g.Shard), g.Slot); e != nil {
+			return e
+		}
+	}
+
 	for _, n := range b.Nullifiers {
 		if _, err = tx.Exec(ctx, "INSERT INTO invisi_nullifiers VALUES(?1,?2,?3)", s.key, n[:], b.Block.Number); err != nil {
+			return err
+		}
+	}
+	for _, n := range b.CreditNullifiers {
+		if _, err = tx.Exec(ctx, "INSERT INTO invisi_credit_nullifiers VALUES(?1,?2,?3)", s.key, n[:], b.Block.Number); err != nil {
 			return err
 		}
 	}
@@ -533,14 +561,14 @@ func (s *SQLiteStore) Events(ctx context.Context, from, to uint64, limit int) ([
 	}
 	return out, nil
 }
-func (s *SQLiteStore) Outputs(ctx context.Context, from, to uint64, limit int) ([]model.Output, error) {
+func (s *SQLiteStore) Outputs(ctx context.Context, from, to uint64, limit int) ([]model.NoteOutput, error) {
 	raw, err := s.items(ctx, "outputs", from, to, limit)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]model.Output, 0, len(raw))
+	out := make([]model.NoteOutput, 0, len(raw))
 	for _, r := range raw {
-		var e model.Output
+		var e model.NoteOutput
 		if err = json.Unmarshal(r, &e); err != nil {
 			return nil, err
 		}

@@ -43,3 +43,15 @@ CREATE TABLE IF NOT EXISTS invisi_broadcaster_formats (deployment text PRIMARY K
 CREATE UNIQUE INDEX IF NOT EXISTS invisi_broadcaster_positions ON invisi_broadcasters(deployment,block_number,log_index);
 
 CREATE INDEX IF NOT EXISTS invisi_commitment_lookup ON invisi_nodes(deployment,hash) WHERE level=0;
+
+CREATE TABLE IF NOT EXISTS invisi_credit_nullifiers (
+ deployment text NOT NULL, hash bytea NOT NULL, block_number bigint NOT NULL,
+ PRIMARY KEY(deployment,hash), FOREIGN KEY(deployment,block_number) REFERENCES invisi_blocks ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS invisi_credit_grants (
+ deployment text NOT NULL, owner bytea NOT NULL, token bytea NOT NULL, block_number bigint NOT NULL, log_index bigint NOT NULL,
+ kind text NOT NULL, shard text NOT NULL, slot integer NOT NULL,
+ PRIMARY KEY(deployment,block_number,log_index), FOREIGN KEY(deployment,block_number) REFERENCES invisi_blocks ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS invisi_credit_grant_lookup ON invisi_credit_grants(deployment,owner,token,kind,block_number,log_index);

@@ -21,20 +21,20 @@ type TransactionReader interface {
 // TransactionUpdates separates availability from an indexed empty result.
 // Outputs and CreditTransitions remain null until Status is indexed.
 type TransactionUpdates struct {
-	TransactionHash   common.Hash    `json:"transactionHash"`
-	Status            string         `json:"status"`
-	BlockNumber       *uint64        `json:"blockNumber,omitempty"`
-	BlockHash         *common.Hash   `json:"blockHash,omitempty"`
-	ReceiptStatus     *uint64        `json:"receiptStatus,omitempty"`
-	IndexedHead       *model.Block   `json:"indexedHead"`
-	Outputs           []model.Output `json:"outputs"`
-	CreditTransitions []model.Event  `json:"creditTransitions"`
+	TransactionHash   common.Hash        `json:"transactionHash"`
+	Status            string             `json:"status"`
+	BlockNumber       *uint64            `json:"blockNumber,omitempty"`
+	BlockHash         *common.Hash       `json:"blockHash,omitempty"`
+	ReceiptStatus     *uint64            `json:"receiptStatus,omitempty"`
+	IndexedHead       *model.Block       `json:"indexedHead"`
+	Outputs           []model.NoteOutput `json:"notes"`
+	CreditTransitions []model.Event      `json:"creditTransitions"`
 }
 
-// GetTransactionUpdates reads one indexed block rather than scanning block ranges.
+// transactionUpdates reads one indexed block rather than scanning block ranges.
 // not_found means the upstream has no mined receipt (unknown or still pending).
 // pending_index also covers a stale indexed fork; callers must retry after catch-up.
-func (a *API) GetTransactionUpdates(ctx context.Context, hash common.Hash) (*TransactionUpdates, error) {
+func (a *API) transactionUpdates(ctx context.Context, hash common.Hash) (*TransactionUpdates, error) {
 	if hash == (common.Hash{}) {
 		return nil, errors.New("nonzero transaction hash required")
 	}
@@ -91,7 +91,7 @@ func (a *API) GetTransactionUpdates(ctx context.Context, hash common.Hash) (*Tra
 	if err = a.checkRange(ctx, anchor); err != nil {
 		return nil, err
 	}
-	result.Outputs = []model.Output{}
+	result.Outputs = []model.NoteOutput{}
 	result.CreditTransitions = []model.Event{}
 	for _, output := range batch.Outputs {
 		if output.TransactionHash == hash {
@@ -106,7 +106,7 @@ func (a *API) GetTransactionUpdates(ctx context.Context, hash common.Hash) (*Tra
 			continue
 		}
 		switch event.Name {
-		case "CreditCreated", "CreditDraw", "CreditCancelled", "CreditToppedUp":
+		case "CreditCreated", "CreditDraw", "CreditUpdated", "CreditRevoked":
 			if event.Block != batch.Block {
 				return nil, errors.New("indexed Credit transition block mismatch")
 			}

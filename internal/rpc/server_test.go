@@ -17,7 +17,7 @@ import (
 
 type fakeBackend struct {
 	head        *model.Block
-	outputs     []model.Output
+	outputs     []model.NoteOutput
 	events      []model.Event
 	blockReads  int
 	reorgAfter  int
@@ -46,7 +46,7 @@ func (f *fakeBackend) Events(context.Context, uint64, uint64, int) ([]model.Even
 	f.eventReads++
 	return f.events, nil
 }
-func (f *fakeBackend) Outputs(context.Context, uint64, uint64, int) ([]model.Output, error) {
+func (f *fakeBackend) Outputs(context.Context, uint64, uint64, int) ([]model.NoteOutput, error) {
 	f.outputReads++
 	return f.outputs, nil
 }
@@ -170,7 +170,7 @@ func TestHTTPStrictRangeAnchors(t *testing.T) {
 func TestDisabledDetectionCannotBeEnabledByRequestHeaders(t *testing.T) {
 	for _, header := range []string{"", "Bearer arbitrary", "wrong-scheme"} {
 		f, rng := anchor()
-		result := call(t, testServer(t, f, false), "invisi_detectOutputs", []any{rng, "0x" + strings.Repeat("01", 32)}, header)
+		result := call(t, testServer(t, f, false), "invisi_detectNotes", []any{rng, "0x" + strings.Repeat("01", 32)}, header)
 		if result.Error == nil || !strings.Contains(result.Error.Message, "disabled") {
 			t.Fatalf("disabled detection accepted: %+v", result)
 		}
@@ -213,21 +213,21 @@ func TestHTTPDetectionRustVectorAndTransitions(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f, rng := anchor()
 			f.head.Timestamp = 2678400
-			f.outputs = []model.Output{{Block: *f.head, Commitment: common.HexToHash("01"), Clue: clue}, {Block: *f.head, Commitment: common.HexToHash("02"), Clue: []byte{0xff}}}
-			f.outputs = append(f.outputs, model.Output{Block: *f.head, Kind: "BatchOutputs", Commitment: common.HexToHash("03")})
-			for _, kind := range []string{"Shield", "Transact", "CrossTreeTransact", "CreditCreated", "CreditToppedUp"} {
-				f.outputs = append(f.outputs, model.Output{Block: *f.head, Kind: kind, Commitment: common.HexToHash("04")})
+			f.outputs = []model.NoteOutput{{Block: *f.head, Commitment: common.HexToHash("01"), Clue: clue}, {Block: *f.head, Commitment: common.HexToHash("02"), Clue: []byte{0xff}}}
+			f.outputs = append(f.outputs, model.NoteOutput{Block: *f.head, Kind: "BatchOutputs", Commitment: common.HexToHash("03")})
+			for _, kind := range []string{"Shield", "Transact", "CrossTreeTransact"} {
+				f.outputs = append(f.outputs, model.NoteOutput{Block: *f.head, Kind: kind, Commitment: common.HexToHash("04")})
 			}
-			f.events = []model.Event{{Name: "Shield"}, {Block: *f.head, Name: "CreditDraw", Data: json.RawMessage(`{"params":{"remainderCommitments":[]}}`)}, {Name: "CreditCancelled"}}
-			transport := call(t, testServer(t, f, true), "invisi_getUpdates", []any{rng}, "")
+			f.events = []model.Event{{Name: "Shield"}, {Block: *f.head, Name: "CreditDraw", Data: json.RawMessage(`{"params":{"stateCommitments":[]}}`)}, {Name: "CreditRevoked"}}
+			transport := call(t, testServer(t, f, true), "invisi_getNoteUpdates", []any{rng}, "")
 			if transport.Error != nil {
 				t.Fatal(transport.Error)
 			}
-			var updates Updates
-			if err := json.Unmarshal(transport.Result, &updates); err != nil || len(updates.Outputs) != len(f.outputs) {
+			var updates NoteUpdates
+			if err := json.Unmarshal(transport.Result, &updates); err != nil || len(updates.Notes) != len(f.outputs) {
 				t.Fatalf("no-envelope outputs missing from transport: %s (%v)", transport.Result, err)
 			}
-			r := call(t, testServer(t, f, true), "invisi_detectOutputs", []any{rng, "0x" + tc.key}, "")
+			r := call(t, testServer(t, f, true), "invisi_detectNotes", []any{rng, "0x" + tc.key}, "")
 			if r.Error != nil {
 				t.Fatal(r.Error)
 			}
@@ -246,18 +246,17 @@ func TestHTTPDetectionRustVectorAndTransitions(t *testing.T) {
 			if fallback.Output.Block != *f.head {
 				t.Fatal("detection lost canonical block context")
 			}
-			if result.CreditTransitions[0].Block != *f.head {
-				t.Fatal("transition lost block context")
-			}
+
 			if !fallback.Fallback || fallback.Output.Commitment != f.outputs[1].Commitment {
 				t.Fatal("malformed clue was not preserved as fallback")
 			}
 			if tc.wantValid && (result.Candidates[0].Fallback || result.Candidates[0].Output.Commitment != f.outputs[0].Commitment) {
 				t.Fatal("correct Rust vector not matched")
 			}
-			if len(result.CreditTransitions) != 2 || result.CreditTransitions[0].Name != "CreditDraw" {
-				t.Fatalf("output-less CreditDraw transition missing: %s", r.Result)
+			if bytes.Contains(r.Result, []byte("creditTransitions")) {
+				t.Fatal("Note detection exposed Credit transitions")
 			}
+
 		})
 	}
 }
@@ -316,8 +315,8 @@ func TestHTTPExactLengthMalformedCluesFallback(t *testing.T) {
 				t.Fatal("fixture is not an exact-length clue")
 			}
 			f, rng := anchor()
-			f.outputs = []model.Output{{Clue: clue, Commitment: common.HexToHash("123")}}
-			r := call(t, testServer(t, f, true), "invisi_detectOutputs", []any{rng, "0x" + vector.DetectionKey}, "")
+			f.outputs = []model.NoteOutput{{Clue: clue, Commitment: common.HexToHash("123")}}
+			r := call(t, testServer(t, f, true), "invisi_detectNotes", []any{rng, "0x" + vector.DetectionKey}, "")
 			if r.Error != nil {
 				t.Fatal(r.Error)
 			}
@@ -335,7 +334,7 @@ func TestHTTPInvalidDetectionKeysFailOnEmptyRange(t *testing.T) {
 	for _, tc := range []struct{ name, key string }{{"zero", strings.Repeat("00", 32)}, {"noncanonical", strings.Repeat("ff", 32)}} {
 		t.Run(tc.name, func(t *testing.T) {
 			f, rng := anchor()
-			r := call(t, testServer(t, f, true), "invisi_detectOutputs", []any{rng, "0x" + tc.key}, "")
+			r := call(t, testServer(t, f, true), "invisi_detectNotes", []any{rng, "0x" + tc.key}, "")
 			if r.Error == nil {
 				t.Fatalf("invalid 32-byte key accepted on empty range: %s", r.Result)
 			}
@@ -383,7 +382,7 @@ func TestDeploymentWithoutIndexedHead(t *testing.T) {
 
 func TestPublicDetectionNeedsNoAPIKey(t *testing.T) {
 	f, rng := anchor()
-	result := call(t, testServer(t, f, true), "invisi_detectOutputs", []any{rng, "0x" + strings.Repeat("01", 32)}, "")
+	result := call(t, testServer(t, f, true), "invisi_detectNotes", []any{rng, "0x" + strings.Repeat("01", 32)}, "")
 	if result.Error != nil {
 		t.Fatalf("enabled public detection rejected: %+v", result.Error)
 	}
@@ -405,7 +404,7 @@ func TestDetectionCapacityReturnsRetryableRPCError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := call(t, handler, "invisi_detectOutputs", []any{rng, "0x" + strings.Repeat("01", 32)}, "")
+	result := call(t, handler, "invisi_detectNotes", []any{rng, "0x" + strings.Repeat("01", 32)}, "")
 	if result.Error == nil || result.Error.Code != -32005 {
 		t.Fatalf("wrong overload error: %+v", result.Error)
 	}
@@ -421,26 +420,17 @@ func TestCreditEndpointsPreserveConfirmedBlockContext(t *testing.T) {
 	f, rng := anchor()
 	b := *f.head
 	b.Timestamp = 2678400
-	f.events = []model.Event{{Block: b, Name: "CreditDraw", Data: json.RawMessage(`{"params":{"remainderCommitments":[]}}`)}}
-	f.outputs = []model.Output{{Block: b, Kind: "CreditDraw", Ciphertext: bytes.Repeat([]byte{5}, 754), Clue: []byte{255}}}
+	f.events = []model.Event{{Block: b, Name: "CreditDraw", Data: json.RawMessage(`{"params":{"stateCommitments":[]}}`)}}
+	f.outputs = []model.NoteOutput{{Block: b, Kind: "CreditDraw", Ciphertext: bytes.Repeat([]byte{5}, 754), Clue: []byte{255}}}
 	h := testServer(t, f, true)
-	for _, method := range []string{"invisi_getCreditTransitions", "invisi_getUpdates"} {
+	for _, method := range []string{"invisi_getCreditTransitions"} {
 		params := []any{rng}
 		r := call(t, h, method, params, "")
 		if r.Error != nil {
 			t.Fatalf("%s: %v", method, r.Error)
 		}
 		var transitions []model.Event
-		if method == "invisi_getUpdates" {
-			var u Updates
-			if err := json.Unmarshal(r.Result, &u); err != nil {
-				t.Fatal(err)
-			}
-			transitions = u.CreditTransitions
-			if len(u.Outputs) != 1 || u.Outputs[0].Block != b {
-				t.Fatalf("output block missing: %s", r.Result)
-			}
-		} else if err := json.Unmarshal(r.Result, &transitions); err != nil {
+		if err := json.Unmarshal(r.Result, &transitions); err != nil {
 			t.Fatal(err)
 		}
 		if len(transitions) != 1 || transitions[0].Block != b {
@@ -458,7 +448,7 @@ func (f *fakeBackend) Broadcasters(context.Context, model.BroadcasterQuery) (*mo
 }
 
 func TestHTTPRangeBoundaryAndAnchorReads(t *testing.T) {
-	for _, method := range []string{"invisi_getEvents", "invisi_getCreditTransitions", "invisi_getUpdates"} {
+	for _, method := range []string{"invisi_getEvents", "invisi_getCreditTransitions", "invisi_getNoteUpdates"} {
 		t.Run(method, func(t *testing.T) {
 			for _, tc := range []struct {
 				name                string
@@ -485,7 +475,7 @@ func TestHTTPRangeBoundaryAndAnchorReads(t *testing.T) {
 						if f.blockReads != 0 || f.eventReads != 0 || f.outputReads != 0 {
 							t.Fatal("invalid range read backend")
 						}
-					} else if f.blockReads != 2 || f.eventReads != 1 {
+					} else if f.blockReads != 2 || (method != "invisi_getNoteUpdates" && f.eventReads != 1) || (method == "invisi_getNoteUpdates" && f.eventReads != 0) {
 						t.Fatalf("anchor reads=%d event reads=%d; want 2 and 1", f.blockReads, f.eventReads)
 					}
 				})
@@ -501,7 +491,7 @@ func TestHTTPRangeBoundaryAndAnchorReads(t *testing.T) {
 }
 
 func TestHTTPRangeEventCapsBeforeTransitionFilter(t *testing.T) {
-	for _, method := range []string{"invisi_getEvents", "invisi_getCreditTransitions", "invisi_getUpdates"} {
+	for _, method := range []string{"invisi_getEvents", "invisi_getCreditTransitions"} {
 		for _, kind := range []string{"count", "bytes"} {
 			t.Run(method+"/"+kind, func(t *testing.T) {
 				f, rng := anchor()

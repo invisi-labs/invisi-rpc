@@ -34,7 +34,7 @@ func TestSQLiteAtomicHistoryRollback(t *testing.T) {
 	apply(b10)
 	apply(b10)
 	leaf1, leaf2 := common.HexToHash("0x01"), common.HexToHash("0x02")
-	b11 := model.Batch{Block: model.Block{Number: 11, Hash: common.HexToHash("0x11"), ParentHash: b10.Block.Hash}, Insertions: []model.Insertion{{TreeID: 1, Commitments: []common.Hash{leaf1}}}, Events: []model.Event{{Name: "insert"}}, Outputs: []model.Output{{Commitment: leaf1}}, Nullifiers: []common.Hash{leaf2}}
+	b11 := model.Batch{Block: model.Block{Number: 11, Hash: common.HexToHash("0x11"), ParentHash: b10.Block.Hash}, Insertions: []model.Insertion{{TreeID: 1, Commitments: []common.Hash{leaf1}}}, Events: []model.Event{{Name: "insert"}}, Outputs: []model.NoteOutput{{Commitment: leaf1}}, Nullifiers: []common.Hash{leaf2}}
 	apply(b11)
 	persisted, err := s.Batch(ctx, 11)
 	if err != nil || persisted == nil || len(persisted.Outputs) != 1 || len(persisted.Events) != 1 {
@@ -62,7 +62,7 @@ func TestSQLiteAtomicHistoryRollback(t *testing.T) {
 	}
 	b12 := model.Batch{Block: model.Block{Number: 12, Hash: common.HexToHash("0x12"), ParentHash: b11.Block.Hash}, Insertions: []model.Insertion{{TreeID: 1, Start: 1, Commitments: []common.Hash{leaf2}}}}
 	b12.Events = []model.Event{{Name: "second"}}
-	b12.Outputs = []model.Output{{Commitment: leaf2}}
+	b12.Outputs = []model.NoteOutput{{Commitment: leaf2}}
 	apply(b12)
 	if _, e := s.Events(ctx, 10, 12, 1); !errors.Is(e, ErrQueryLimit) {
 		t.Fatalf("event overflow: %v", e)
@@ -224,7 +224,7 @@ func TestSQLiteCreditBlockContextRestartReorgAndFormatValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	original := model.Batch{Block: model.Block{Number: 1, Hash: common.HexToHash("1"), Timestamp: 2678400}, Events: []model.Event{{Name: "CreditDraw", Block: model.Block{Timestamp: 999}}}, Outputs: []model.Output{{Kind: "CreditDraw", Block: model.Block{Timestamp: 888}}}}
+	original := model.Batch{Block: model.Block{Number: 1, Hash: common.HexToHash("1"), Timestamp: 2678400}, Events: []model.Event{{Name: "CreditDraw", Block: model.Block{Timestamp: 999}}}, Outputs: []model.NoteOutput{{Kind: "CreditDraw", Block: model.Block{Timestamp: 888}}}}
 	if err = s.Apply(ctx, original); err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +270,7 @@ func TestSQLiteCreditBlockContextRestartReorgAndFormatValidation(t *testing.T) {
 	if _, err = s.Checkpoint(ctx); err == nil {
 		t.Fatal("accepted current block record missing timestamp")
 	}
-	if _, err = s.pool.ExecContext(ctx, "UPDATE invisi_index_formats SET version=99 WHERE deployment=?1", s.key); err != nil {
+	if _, err = s.pool.ExecContext(ctx, "UPDATE invisi_index_formats SET version=2 WHERE deployment=?1", s.key); err != nil {
 		t.Fatal(err)
 	}
 	if invalid, e := OpenSQLite(ctx, path, dep); e == nil {

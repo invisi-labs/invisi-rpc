@@ -21,7 +21,7 @@ type Backend interface {
 	Membership(context.Context, uint64, uint32, common.Hash) (*model.Membership, error)
 	Note(context.Context, common.Hash, uint64) (*model.NoteLookup, error)
 	Events(context.Context, uint64, uint64, int) ([]model.Event, error)
-	Outputs(context.Context, uint64, uint64, int) ([]model.Output, error)
+	Outputs(context.Context, uint64, uint64, int) ([]model.NoteOutput, error)
 	IsSpent(context.Context, common.Hash) (bool, error)
 	Broadcasters(context.Context, model.BroadcasterQuery) (*model.BroadcasterPage, error)
 	ReceivingAddress(context.Context, common.Address) (*model.RegisteredReceivingAddress, error)

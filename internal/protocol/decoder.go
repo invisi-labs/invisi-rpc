@@ -17,6 +17,7 @@ import (
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
 )
 
+//go:generate go run generate_protocol_abi.go
 //go:embed InvisiProtocol.abi
 var pinnedABI []byte
 
@@ -154,7 +155,7 @@ func (d *Decoder) Decode(block model.Block, logs []types.Log) (batch model.Batch
 			if actual, ok := inserted[location{l.TxHash, id, leaf}]; !ok || actual != c {
 				return fmt.Errorf("%s: output does not match transaction insertion", e.name)
 			}
-			batch.Outputs = append(batch.Outputs, model.Output{Block: block, TreeID: id, LeafIndex: leaf, Commitment: c, Token: token, Ciphertext: append([]byte(nil), v.Ciphertext...), Clue: append([]byte(nil), v.Clue...), TransactionHash: l.TxHash, LogIndex: l.Index, Kind: e.name})
+			batch.Outputs = append(batch.Outputs, model.NoteOutput{Block: block, TreeID: id, LeafIndex: leaf, Commitment: c, Token: token, Ciphertext: append([]byte(nil), v.Ciphertext...), Clue: append([]byte(nil), v.Clue...), TransactionHash: l.TxHash, LogIndex: l.Index, Kind: e.name})
 			return nil
 		}
 		switch e.name {
@@ -237,72 +238,80 @@ func (d *Decoder) Decode(block model.Block, logs []types.Log) (batch model.Batch
 			}
 		case "BatchRequest":
 			addNull(m["nullifiers"])
-		case "CreditCancelled":
-			batch.Nullifiers = append(batch.Nullifiers, m["nullifier"].([32]byte))
-		case "CreditCreated", "CreditToppedUp":
+		case "CreditCreated", "CreditUpdated":
 			p := m
-			if e.name == "CreditToppedUp" {
-				q := fields(m["params"])
-				p = fields(q["creation"])
-				batch.Nullifiers = append(batch.Nullifiers, q["creditNullifier"].([32]byte))
+			if e.name == "CreditUpdated" {
+				p = fields(m["params"])
+				batch.CreditNullifiers = append(batch.CreditNullifiers, p["nullifier"].([32]byte))
 			}
-			addNull(p["nullifiers"])
 			id, x := tree(m["outputTreeId"])
 			if x != nil {
 				return model.Batch{}, x
 			}
-			ls := m["leafIndices"].([]uint32)
+			c := common.Hash(p["creditCommitment"].([32]byte))
+			leaf := m["leafIndex"].(uint32)
 			vs := tuple[[]delivery](m["deliveries"])
-			credit := common.Hash(p["creditCommitment"].([32]byte))
-			change := common.Hash(p["changeCommitment"].([32]byte))
-			want := 1
-			if change != (common.Hash{}) {
-				want = 2
+			if len(vs) != 2 {
+				return model.Batch{}, fmt.Errorf("%s: expected owner and spender state deliveries", e.name)
 			}
-			if len(ls) != want || len(vs) != 3 {
-				return model.Batch{}, fmt.Errorf("%s: array lengths differ", e.name)
-			}
-			for i := 0; i < 2; i++ {
-				if err = add(id, ls[0], credit, p["token"].(common.Address), vs[i]); err != nil {
+			for _, v := range vs {
+				if err = add(id, leaf, c, p["token"].(common.Address), v); err != nil {
 					return model.Batch{}, err
 				}
-			}
-			if want == 2 {
-				if err = add(id, ls[1], change, p["token"].(common.Address), vs[2]); err != nil {
-					return model.Batch{}, err
-				}
-			} else if len(vs[2].Ciphertext) != 0 || len(vs[2].Clue) != 0 {
-				return model.Batch{}, fmt.Errorf("nonempty absent change delivery")
+				last := len(batch.Outputs) - 1
+				batch.CreditStates = append(batch.CreditStates, model.StateFromOutput(batch.Outputs[last], []model.Delivery{{Ciphertext: v.Ciphertext, Clue: v.Clue}}))
+				batch.Outputs = batch.Outputs[:last]
 			}
 		case "CreditDraw":
 			p := fields(m["params"])
-			addNull(p["nullifiers"])
-			cs := hashes(p["remainderCommitments"])
-			ls := m["remainderLeafIndices"].([]uint32)
+			ns := hashes(p["nullifiers"])
+			batch.CreditNullifiers = append(batch.CreditNullifiers, ns...)
+			cs := hashes(p["stateCommitments"])
+			ls := m["leafIndices"].([]uint32)
 			vs := tuple[[]delivery](m["deliveries"])
 			n := len(cs)
-			if len(ls) != n || len(vs) != 2*n || len(hashes(p["nullifiers"])) != n || reflect.ValueOf(p["expiries"]).Len() != n || len(hashes(p["recoveryAmounts"])) != n {
-				return model.Batch{}, fmt.Errorf("CreditDraw: array lengths differ")
+			if n == 0 || len(ns) != n || len(ls) != n+1 || len(vs) != 2*n+1 || len(hashes(p["recoveryAmounts"])) != n {
+				return model.Batch{}, fmt.Errorf("CreditDraw: inconsistent state and Note dimensions")
 			}
 			id, x := tree(m["outputTreeId"])
 			if x != nil {
 				return model.Batch{}, x
 			}
 			for i, c := range cs {
-				for j := 0; j < 2; j++ {
-					v := vs[2*i+j]
-					if c == (common.Hash{}) {
-						if ls[i] != 0 || len(v.Ciphertext) != 0 || len(v.Clue) != 0 {
-							return model.Batch{}, fmt.Errorf("CreditDraw: nonempty absent remainder")
-						}
-						continue
-					}
+				if c == (common.Hash{}) {
+					return model.Batch{}, fmt.Errorf("CreditDraw: zero successor state")
+				}
+				for _, v := range vs[2*i : 2*i+2] {
 					if err = add(id, ls[i], c, p["token"].(common.Address), v); err != nil {
 						return model.Batch{}, err
 					}
+					last := len(batch.Outputs) - 1
+					batch.CreditStates = append(batch.CreditStates, model.StateFromOutput(batch.Outputs[last], []model.Delivery{{Ciphertext: v.Ciphertext, Clue: v.Clue}}))
+					batch.Outputs = batch.Outputs[:last]
 				}
 			}
+			if err = add(id, ls[n], common.Hash(p["noteCommitment"].([32]byte)), p["token"].(common.Address), vs[2*n]); err != nil {
+				return model.Batch{}, err
+			}
+
 		}
 	}
+	combined := []model.CreditState{}
+	for _, state := range batch.CreditStates {
+		if len(combined) > 0 {
+			last := &combined[len(combined)-1]
+			if last.TransactionHash == state.TransactionHash && last.TreeID == state.TreeID && last.LeafIndex == state.LeafIndex {
+				last.Deliveries = append(last.Deliveries, state.Deliveries...)
+				continue
+			}
+		}
+		combined = append(combined, state)
+	}
+	for _, state := range combined {
+		if len(state.Deliveries) != 2 {
+			return model.Batch{}, fmt.Errorf("Credit state must have exactly two deliveries")
+		}
+	}
+	batch.CreditStates = combined
 	return batch, nil
 }

@@ -424,7 +424,7 @@ func TestInspectContextCancellation(t *testing.T) {
 	if _, err := rand.New(rand.NewSource(7)).Read(payload); err != nil {
 		t.Fatal(err)
 	}
-	bs[0].Outputs = []model.Output{{Ciphertext: payload}}
+	bs[0].Outputs = []model.NoteOutput{{Ciphertext: payload}}
 	path, err := Export(context.Background(), &fakeStore{batches: bs, head: &bs[1].Block}, dep, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -442,8 +442,8 @@ func TestRestoreExpectedChecksumDetectsSameInodeMutation(t *testing.T) {
 	if _, err := rand.New(rand.NewSource(9)).Read(payload); err != nil {
 		t.Fatal(err)
 	}
-	bs[0].Outputs = []model.Output{{Ciphertext: payload}}
-	bs[1].Outputs = []model.Output{{Kind: "before"}}
+	bs[0].Outputs = []model.NoteOutput{{Ciphertext: payload}}
+	bs[1].Outputs = []model.NoteOutput{{Kind: "before"}}
 	path, err := Export(context.Background(), &fakeStore{batches: bs, head: &bs[1].Block}, dep, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -454,7 +454,7 @@ func TestRestoreExpectedChecksumDetectsSameInodeMutation(t *testing.T) {
 		t.Fatal(err)
 	}
 	changed := bs[1]
-	changed.Outputs = []model.Output{{Kind: "after"}}
+	changed.Outputs = []model.NoteOutput{{Kind: "after"}}
 	h := header(dep)
 	replacement := filepath.Join(t.TempDir(), "replacement.gz")
 	writeRecords(t, replacement, []record{{Type: "header", Header: &h}, {Type: "block", Batch: &bs[0]}, {Type: "block", Batch: &changed}, {Type: "footer", Checkpoint: &bs[1].Block}})
@@ -497,7 +497,7 @@ func TestRestoreKeepsVerifiedInodeAfterPathReplacement(t *testing.T) {
 	expected := fileHash(t, path)
 	h := header(dep)
 	changed := bs[1]
-	changed.Outputs = []model.Output{{Kind: "unverified replacement"}}
+	changed.Outputs = []model.NoteOutput{{Kind: "unverified replacement"}}
 	replacement := filepath.Join(filepath.Dir(path), "replacement.gz")
 	writeRecords(t, replacement, []record{{Type: "header", Header: &h}, {Type: "block", Batch: &bs[0]}, {Type: "block", Batch: &changed}, {Type: "footer", Checkpoint: &bs[1].Block}})
 	dest := &fakeStore{onImport: func() {

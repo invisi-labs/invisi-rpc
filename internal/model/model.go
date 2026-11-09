@@ -55,7 +55,7 @@ type Insertion struct {
 	Commitments []common.Hash `json:"commitments"`
 	LogIndex    uint          `json:"logIndex"`
 }
-type Output struct {
+type NoteOutput struct {
 	Block           Block          `json:"block"`
 	TreeID          uint64         `json:"treeId"`
 	LeafIndex       uint32         `json:"leafIndex"`
@@ -67,6 +67,33 @@ type Output struct {
 	LogIndex        uint           `json:"logIndex"`
 	Kind            string         `json:"kind"`
 }
+
+// CreditState is a public encrypted authority-state delivery, never an ordinary Note.
+type Delivery struct {
+	Ciphertext hexutil.Bytes `json:"ciphertext"`
+	Clue       hexutil.Bytes `json:"clue"`
+}
+type CreditState struct {
+	Block           Block          `json:"block"`
+	TreeID          uint64         `json:"treeId"`
+	LeafIndex       uint32         `json:"leafIndex"`
+	Commitment      common.Hash    `json:"commitment"`
+	Token           common.Address `json:"token"`
+	Deliveries      []Delivery     `json:"deliveries"`
+	TransactionHash common.Hash    `json:"transactionHash"`
+	LogIndex        uint           `json:"logIndex"`
+	Kind            string         `json:"kind"`
+}
+
+func StateFromOutput(o NoteOutput, deliveries []Delivery) CreditState {
+	return CreditState{o.Block, o.TreeID, o.LeafIndex, o.Commitment, o.Token, deliveries, o.TransactionHash, o.LogIndex, o.Kind}
+}
+
+type CreditStateLookup struct {
+	State      CreditState `json:"state"`
+	Membership Membership  `json:"membership"`
+}
+
 type Event struct {
 	Block           Block           `json:"block"`
 	Name            string          `json:"name"`
@@ -120,15 +147,17 @@ type BroadcasterPage struct {
 	Next         *common.Address         `json:"next,omitempty"`
 }
 type Batch struct {
-	Broadcasters  []BroadcasterUpdate  `json:"broadcasters,omitempty"`
-	Registrations []RegistrationUpdate `json:"registrations,omitempty"`
-	Block         Block                `json:"block"`
-	Logs          []types.Log          `json:"logs"`
-	Events        []Event              `json:"events"`
-	CreatedTrees  []uint64             `json:"createdTrees"`
-	Insertions    []Insertion          `json:"insertions"`
-	Outputs       []Output             `json:"outputs"`
-	Nullifiers    []common.Hash        `json:"nullifiers"`
+	Broadcasters     []BroadcasterUpdate  `json:"broadcasters,omitempty"`
+	Registrations    []RegistrationUpdate `json:"registrations,omitempty"`
+	Block            Block                `json:"block"`
+	Logs             []types.Log          `json:"logs"`
+	Events           []Event              `json:"events"`
+	CreatedTrees     []uint64             `json:"createdTrees"`
+	Insertions       []Insertion          `json:"insertions"`
+	Outputs          []NoteOutput         `json:"outputs"`
+	CreditStates     []CreditState        `json:"creditStates"`
+	CreditNullifiers []common.Hash        `json:"creditNullifiers"`
+	Nullifiers       []common.Hash        `json:"nullifiers"`
 }
 type Root struct {
 	TreeID    uint64      `json:"treeId"`
@@ -148,6 +177,9 @@ type Membership struct {
 func (b *Batch) BindBlockContext() {
 	for i := range b.Events {
 		b.Events[i].Block = b.Block
+	}
+	for i := range b.CreditStates {
+		b.CreditStates[i].Block = b.Block
 	}
 	for i := range b.Outputs {
 		b.Outputs[i].Block = b.Block
@@ -177,6 +209,6 @@ func (b *Batch) UnmarshalJSON(data []byte) error {
 // NoteLookup binds an indexed output to a membership proof from one storage snapshot.
 // It makes no claim about spending authority or nullifier status.
 type NoteLookup struct {
-	Output     Output     `json:"output"`
+	Output     NoteOutput `json:"output"`
 	Membership Membership `json:"membership"`
 }

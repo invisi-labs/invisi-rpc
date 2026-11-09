@@ -27,7 +27,7 @@ type Backend interface {
 	Membership(context.Context, uint64, uint32, common.Hash) (*model.Membership, error)
 	Note(context.Context, common.Hash, uint64) (*model.NoteLookup, error)
 	Events(context.Context, uint64, uint64, int) ([]model.Event, error)
-	Outputs(context.Context, uint64, uint64, int) ([]model.Output, error)
+	Outputs(context.Context, uint64, uint64, int) ([]model.NoteOutput, error)
 	IsSpent(context.Context, common.Hash) (bool, error)
 	Broadcasters(context.Context, model.BroadcasterQuery) (*model.BroadcasterPage, error)
 	ReceivingAddress(context.Context, common.Address) (*model.RegisteredReceivingAddress, error)
@@ -132,10 +132,6 @@ func (a *API) GetNote(ctx context.Context, commitment common.Hash, atBlock uint6
 	return result, nil
 }
 
-func (a *API) IsSpent(ctx context.Context, nullifier common.Hash) (bool, error) {
-	return a.Store.IsSpent(ctx, nullifier)
-}
-
 // MaxUpdateBlocks is the inclusive block limit for every ranged RPC query.
 const MaxUpdateBlocks = 10000
 
@@ -197,36 +193,6 @@ func (a *API) loadEvents(ctx context.Context, r Range) ([]model.Event, error) {
 	return v, nil
 }
 
-type Updates struct {
-	BlockHash         common.Hash    `json:"blockHash"`
-	Outputs           []model.Output `json:"outputs"`
-	CreditTransitions []model.Event  `json:"creditTransitions"`
-}
-
-func (a *API) GetUpdates(ctx context.Context, r Range) (*Updates, error) {
-	if e := a.checkRange(ctx, r); e != nil {
-		return nil, e
-	}
-	v, e := a.Store.Outputs(ctx, r.FromBlock, r.ToBlock, 10000)
-	if e != nil {
-		return nil, e
-	}
-	if len(v) == 10000 {
-		return nil, errors.New("range too large; query smaller ranges or getBlock")
-	}
-	events, e := a.loadEvents(ctx, r)
-	if e != nil {
-		return nil, e
-	}
-	if e = a.checkRange(ctx, r); e != nil {
-		return nil, e
-	}
-	result := &Updates{r.BlockHash, v, creditTransitions(events)}
-	if e = checkResponseSize(result); e != nil {
-		return nil, e
-	}
-	return result, nil
-}
 func (a *API) GetCreditTransitions(ctx context.Context, r Range) ([]model.Event, error) {
 	events, e := a.GetEvents(ctx, r)
 	if e != nil {
@@ -239,7 +205,7 @@ func creditTransitions(events []model.Event) []model.Event {
 	out := []model.Event{}
 	for _, v := range events {
 		switch v.Name {
-		case "CreditCreated", "CreditDraw", "CreditCancelled", "CreditToppedUp":
+		case "CreditCreated", "CreditDraw", "CreditUpdated", "CreditRevoked":
 			out = append(out, v)
 		}
 	}
@@ -247,17 +213,16 @@ func creditTransitions(events []model.Event) []model.Event {
 }
 
 type Candidate struct {
-	Output   model.Output `json:"output"`
-	Fallback bool         `json:"fallback"`
+	Output   model.NoteOutput `json:"note"`
+	Fallback bool             `json:"fallback"`
 }
 type DetectionResult struct {
-	BlockHash         common.Hash   `json:"blockHash"`
-	CheckedBits       int           `json:"checkedBits"`
-	Candidates        []Candidate   `json:"candidates"`
-	CreditTransitions []model.Event `json:"creditTransitions"`
+	BlockHash   common.Hash `json:"blockHash"`
+	CheckedBits int         `json:"checkedBits"`
+	Candidates  []Candidate `json:"candidates"`
 }
 
-func (a *API) DetectOutputs(ctx context.Context, r Range, key hexutil.Bytes) (*DetectionResult, error) {
+func (a *API) detectOutputs(ctx context.Context, r Range, key hexutil.Bytes) (*DetectionResult, error) {
 	if !a.detectionEnabled {
 		return nil, errors.New("delegated detection is disabled")
 	}
@@ -270,15 +235,15 @@ func (a *API) DetectOutputs(ctx context.Context, r Range, key hexutil.Bytes) (*D
 	if err := cryptography.ValidateDetectionKey(key); err != nil {
 		return nil, err
 	}
-	updates, e := a.GetUpdates(ctx, r)
+	updates, e := a.GetNoteUpdates(ctx, r)
 	if e != nil {
 		return nil, e
 	}
-	if len(updates.Outputs) > 1000 {
+	if len(updates.Notes) > 1000 {
 		return nil, errors.New("detection range exceeds 1000 deliveries; use a smaller range")
 	}
-	result := &DetectionResult{BlockHash: r.BlockHash, CheckedBits: a.DetectionBits, Candidates: []Candidate{}, CreditTransitions: updates.CreditTransitions}
-	for _, v := range updates.Outputs {
+	result := &DetectionResult{BlockHash: r.BlockHash, CheckedBits: a.DetectionBits, Candidates: []Candidate{}}
+	for _, v := range updates.Notes {
 		if e = ctx.Err(); e != nil {
 			return nil, e
 		}

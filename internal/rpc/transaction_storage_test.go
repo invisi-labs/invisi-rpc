@@ -20,13 +20,13 @@ func TestTransactionUpdatesSQLiteRollback(t *testing.T) {
 	}
 	defer store.Close()
 	batch := *fake.batch
-	batch.Outputs = []model.Output{{TransactionHash: hash, LogIndex: 1}}
+	batch.Outputs = []model.NoteOutput{{TransactionHash: hash, LogIndex: 1}}
 	batch.Events = []model.Event{{TransactionHash: hash, Name: "CreditDraw", LogIndex: 2, Data: []byte(`{}`)}}
 	if err = store.Apply(ctx, batch); err != nil {
 		t.Fatal(err)
 	}
 	api.Store = store
-	result, err := api.GetTransactionUpdates(ctx, hash)
+	result, err := api.transactionUpdates(ctx, hash)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func TestTransactionUpdatesSQLiteRollback(t *testing.T) {
 	if err = store.Rollback(ctx, 9); err != nil {
 		t.Fatal(err)
 	}
-	result, err = api.GetTransactionUpdates(ctx, hash)
+	result, err = api.transactionUpdates(ctx, hash)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -159,68 +159,48 @@ Snapshots replay stored normalized batches and are not a trustless proof of comp
 
 ## JSON-RPC
 
-The service namespace is `/v1`. `GET /v1` returns `apiVersion` and active chain routes; `invisi_getVersion` and `invisi_getStatus` also return `apiVersion: "v1"` and the chain-read `protocolVersion: "1"`. The deployment's `VERSION()` is read and checked at startup; incompatible versions are rejected before HTTP publication.
-
-POST JSON-RPC 2.0 to `/v1/chains/<chainId>` using positional parameter arrays. `GET /v1` provides chain discovery; the discovery path is not a JSON-RPC endpoint. Addresses, hashes, ciphertexts, clues and detection keys use `0x` hex. Block numbers, tree IDs and indices are JSON integers; ABI uint256 values inside decoded event payloads are decimal strings to preserve precision. Full blocks also retain original EVM logs.
+POST JSON-RPC 2.0 with positional parameter arrays to `/v1/chains/<chainId>`. `GET /v1` discovers active chains. API namespace and on-chain `VERSION()` remain `v1` / `1`; deployment runtime pins distinguish the deployed contract. This service has not been released or deployed. Its v1 business API exposes independent Note and Credit methods; mixed business methods are not available.
 
 | Method | Parameters | Result |
 | --- | --- | --- |
-| `invisi_getVersion` | `[]` | API and on-chain Protocol versions |
-| `invisi_getDeployment` | `[]` | Protocol and optional registry deployment profile, API and Protocol versions; available before the first indexed block |
-| `invisi_getStatus` | `[]` | Deployment, indexed head, detection settings |
-| `invisi_getBlock` | `[blockNumber]` | Complete indexed block, raw logs and normalized data |
-| `invisi_getEvents` | `[range]` | Events in canonical log order |
-| `invisi_getRoots` | `[treeId]` | Up to 10,000 recent recorded roots, newest first |
-| `invisi_getNote` | `[commitment, atBlock]` | Indexed output and Merkle membership from one snapshot; `null` if not found at or before the indexed block |
-| `invisi_getMembership` | `[treeId, leafIndex, root]` | Commitment, 16 siblings and historical anchor |
-| `invisi_getReceivingAddress` | `[ownerAddress]` | Indexed registered public keys and nonce with the indexed block reference; `null` if unregistered |
-| `invisi_isSpent` | `[nullifier]` | Consumption through the indexed head |
-| `invisi_getUpdates` | `[range]` | Public outputs and Credit transitions |
-| `invisi_getTransactionUpdates` | `[transactionHash]` | One transaction’s indexed outputs and Credit transitions, with explicit availability status |
-| `invisi_getCreditTransitions` | `[range]` | Credit creation, draw, cancellation and top-up |
-| `invisi_detectOutputs` | `[range, detectionKey]` | FMD candidates and Credit transitions |
+| `invisi_getVersion` | `[]` | API and Protocol versions |
+| `invisi_getDeployment` | `[]` | Pinned public deployment profile |
+| `invisi_getStatus` | `[]` | Deployment and indexed head |
+| `invisi_getBlock` | `[blockNumber]` | Low-level complete indexed block and raw logs |
+| `invisi_getEvents` | `[range]` | Low-level canonical events |
+| `invisi_getRoots` | `[treeId]` | Recent physical NoteTree roots |
+| `invisi_getMembership` | `[treeId, leafIndex, root]` | Physical leaf membership; does not identify a Note or Credit |
+| `invisi_getNote` | `[commitment, atBlock]` | `{output, membership}` for an ordinary Note, or `null` |
+| `invisi_getNoteUpdates` | `[range]` | `{blockHash, notes}`; ordinary Notes only |
+| `invisi_getTransactionNoteUpdates` | `[transactionHash]` | Availability metadata and `notes` |
+| `invisi_detectNotes` | `[range, detectionKey]` | `{blockHash, checkedBits, candidates:[{note, fallback}]}` |
+| `invisi_isNoteSpent` | `[nullifier, atBlock]` | Ordinary Note consumption through the indexed block |
+| `invisi_getCreditState` | `[commitment, atBlock]` | `{state, membership}` for Credit authority, or `null` |
+| `invisi_getCreditTransitions` | `[range]` | CreditCreated / CreditDraw / CreditUpdated / CreditRevoked events |
+| `invisi_getTransactionCreditUpdates` | `[transactionHash]` | Availability metadata, `states`, and `transitions` |
+| `invisi_detectCreditStates` | `[range, detectionKey]` | `{blockHash, checkedBits, candidates:[{state, fallback}]}` |
+| `invisi_isCreditConsumed` | `[nullifier, atBlock]` | Credit state consumption through the indexed block |
+| `invisi_getCreditAllocation` | `[owner, token, atBlock]` | `{block, shard, slot}`; next original-grant location |
+| `invisi_getCreditRevocationBitmap` | `[owner, token, shard, word, atBlock]` | `{block, bitmap}` |
+| `invisi_getReceivingAddress` | `[ownerAddress]` | Indexed registered keys and nonce |
 
-`invisi_getNote` uses a deployment-scoped commitment index, including outputs without an encrypted envelope. The requested `atBlock` must be indexed. The result is `{ output, membership }`, using the existing output schema and membership schema (`anchor`, `leafIndex`, `commitment`, `siblings`). The newest recorded root at or before `atBlock` is selected. Output metadata and the proof are read in one database snapshot; reorganized query anchors return an error. A null result means absent from the current index snapshot, not proof of absence from the chain. The response does not establish ownership or spent status. Clients must recompute the Note commitment, verify the Merkle path, independently authenticate the root against the Protocol on a trusted chain node, and query the derived nullifier when checking spendability. No nonce or private Note data is sent to this endpoint.
+`invisi_getUpdates`, `invisi_getTransactionUpdates`, `invisi_detectOutputs`, and `invisi_isSpent` are removed and return JSON-RPC method-not-found (`-32601`). Use the corresponding explicit Note or Credit method above. Low-level blocks/events and physical tree membership remain shared; public business responses do not mix Note and Credit collections.
 
-A range is `{ "fromBlock": 100, "toBlock": 110, "blockHash": "0x…" }`. The hash must match indexed `toBlock`, obtained through `getBlock` or `getStatus`. Queries accept at most 10,000 blocks (the inclusive `rpc.MaxUpdateBlocks` limit) and 10,000 results; overflow returns an error. Use smaller ranges or full blocks. Reorganizations invalidate old anchors; recheck when combining responses.
+`NoteOutput` retains `block`, `treeId`, `leafIndex`, `commitment`, `token`, `ciphertext`, `clue`, `transactionHash`, `logIndex`, and `kind`. An indexed Credit state has the same leaf metadata, with `deliveries:[{ciphertext,clue},{ciphertext,clue}]` instead of a single ciphertext/clue. Both owner and spender envelopes are retained in on-chain order, without inferring which recipient controls them. `getNote` never returns Credit and `getCreditState` never returns a Note. A missing result establishes no cryptographic absence claim. Clients recompute commitments, verify paths, authenticate roots through an independent Chain RPC, and check the appropriate derived nullifier.
 
-```sh
-curl http://127.0.0.1:8080/v1/chains/31337 \
-  -H 'Content-Type: application/json' \
-  --data '{"jsonrpc":"2.0","id":1,"method":"invisi_getStatus","params":[]}'
-```
+Credit creation registers authority without principal funding; an optional authorized fee is pulled from the owner wallet. Credit draw consumes N prior states and appends N successor states plus exactly one ordinary receiver Note; only that receiver Note appears in Note queries. Payer totals and grant usage are gross; the ordinary Note amount is gross minus the authorized fee, which accrues to the shared broadcaster ledger. Credit update consumes one prior state and preserves its grant namespace; its optional fee is pulled from the owner. Revocation changes an original-grant bitmap and may pull its authorized owner fee; it creates no Note, state, or nullifier. Allocation starts at shard `"1"`, slot `0`, and advances on original creation only. A revoked grant may still have an unconsumed state: bitmap status and state consumption are separate facts. Public owner/token queries do not identify decrypted wallet identities.
 
-Live indexing stores contract-recorded **batch-final roots**, never per-leaf intermediate roots. Each new root is checked against `rootHistory(treeId, root)` at the exact block before committing. Historical nodes are versioned by leaf count; events, outputs, nullifiers, roots and checkpoints commit or roll back together. The service does not calculate a user's private balance or prove response completeness.
+Hashes, addresses, ciphertexts, clues and keys use `0x` hex. ABI uint256 and uint64 values inside decoded event payloads are decimal strings; uint16 slots are numbers. Allocation `shard` is a canonical positive uint64 decimal string; bitmap is a uint256 decimal string. Bitmap `word` is an integer from 0 through 255. Block/tree/leaf indices and header timestamps remain JSON numbers.
+
+A range is `{ "fromBlock": 100, "toBlock": 110, "blockHash": "0x…" }`, anchored to indexed `toBlock`. It accepts at most 10,000 inclusive blocks, bounded result counts, and 8 MiB responses. Oversized results fail explicitly; request smaller ranges or complete blocks. `atBlock` must be indexed. Responses recheck anchors before returning; retain hashes and retry after reorganizations. Live indexing validates contract-recorded batch-final roots, not intermediate per-leaf roots. Blocks, typed projections, roots, nullifiers and grant history commit and roll back together.
 
 ## Updates for one transaction
 
-Call `invisi_getTransactionUpdates` with one nonzero, 32-byte transaction hash. The server obtains the mined receipt from the configured Chain RPC, then reads that block from its existing local index. It does not scan historical ranges or substitute live upstream logs for indexed results. No new database or snapshot format is required.
-
-```json
-{"jsonrpc":"2.0","id":1,"method":"invisi_getTransactionUpdates","params":["0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"]}
-```
-
-The result includes `transactionHash`, `status`, `indexedHead`, `outputs` and `creditTransitions`. When a mined receipt exists, it also includes `blockNumber`, `blockHash` and `receiptStatus` (0 for reverted, 1 for successful). Availability status is separate from EVM execution success:
-
-| Status | Meaning | Update collections |
-| --- | --- | --- |
-| `not_found` | Chain RPC has no mined receipt; the hash may be unknown or the transaction may still be pending | `null` |
-| `pending_index` | The receipt exists, but the local index has not reached its canonical block or still contains a different fork | `null` |
-| `indexed` | The canonical transaction block was indexed and checked during this request | Arrays; empty arrays mean no matching protocol updates |
-
-Outputs retain the same shape as `getUpdates`; Credit transitions include creation, draw, cancellation and top-up. Other transactions in the same block are excluded. An unrelated or reverted transaction in an indexed block can therefore return `indexed` with empty arrays. Transactions before the configured index starting block return an error. Upstream failures and reorganizations observed during response construction return errors, never an empty success. Responses use the same 8 MiB query budget; an oversized result returns an error directing callers to `invisi_getBlock`.
-
-`pending_index` includes confirmation-delayed indexing and is retryable. Clients should still authenticate canonical receipts and output commitments through their own Chain RPC, retain block references, and handle later reorganizations. This query does not establish finality, decrypt outputs or provide sender-private history.
+Use `getTransactionNoteUpdates` and `getTransactionCreditUpdates` independently. Both return `transactionHash`, `status`, `indexedHead`, and optional `blockNumber`, `blockHash`, `receiptStatus`. `not_found` means no mined receipt (possibly pending); `pending_index` means its canonical block is not indexed yet; `indexed` means its indexed block was authenticated during the query. Typed collections are `null` before indexing and arrays afterward, including empty arrays for unrelated/reverted transactions. Receipt execution success is separate from availability. Other transactions in the same block are excluded. Upstream failures, predeployment transactions and observed reorganizations fail explicitly. The service reads a mined receipt and the existing local block, never substitutes upstream logs for indexed data.
 
 ## Optional delegated FMD
 
-`chain add` enables FMD by default. Set `--detection-enabled=false` when adding a chain, or set its `detectionEnabled` configuration to `false`, to disable `invisi_detectOutputs`. A configuration entry without this field disables detection. This switch is independent of API authentication. Supply only a detection key, never a viewing or spending private key. Detection keys are not persisted and request bodies are not logged.
-
-Senders generate 24-bit, 68-byte clues. The service checks a configurable 1–24-bit prefix (`detectionBits: 8` by default). Public preparation is cached; detection remains key-specific. Two scans may run concurrently, with at most 1,000 deliveries per request, independently of indexing.
-
-Intentional funds outputs with paired empty ciphertext/clue are indexed with their exact commitment and leaf position but omitted from FMD candidates. Malformed/unsupported nonempty clues are returned with `fallback: true` for local inspection. Credit transitions are returned separately because remainder recovery may need a parent/shared key even when the child envelope cannot be decrypted. Clients decrypt and verify candidates. A valid but deliberately unrelated clue cannot be classified as malformed; complete recovery retrieves events without FMD filtering.
-
-Detection is request-driven. Persistent per-user delegation queues and WebSocket delivery are not implemented. Applications manage cursors, retries and reorg handling.
+Both typed detection methods require `detectionEnabled`, a valid detection key and a free detection slot. Configuration without the flag disables detection. Supply no viewing or spending key. Request bodies are not logged and keys are not persisted. Two scans may run concurrently. Note detection permits 1,000 deliveries; Credit detection permits 1,000 state records with two envelopes each. A Credit candidate is returned when either envelope matches; malformed nonempty clues return the complete state with `fallback:true`. Notes with intentionally omitted paired-empty envelopes are not FMD candidates. Clients decrypt and verify candidates. Valid unrelated clues cannot be distinguished from nonmatching ones, so complete recovery reads unfiltered events. Clues use 24-bit sender precision and a configurable 1–24-bit scan prefix.
 
 ## HTTP gateway and overload handling
 
@@ -244,7 +224,7 @@ Clients should use bounded exponential backoff with jitter, respecting retry gui
 | `internal/storage`, `internal/snapshot` | SQLite/PostgreSQL and portable bootstrap |
 | `internal/rpc` | HTTP queries, limits and detection |
 
-The embedded ABI is synchronized with the current Protocol build; snapshot metadata pins its SHA-256 and Protocol v1 profile. Crypto source references and independent Noir/Barretenberg/Rust vectors are retained. Go FMD uses variable-time arithmetic and has not been independently audited.
+Run `go generate ./internal/protocol` to regenerate the event ABI after authenticating all artifact source hashes against the sibling Protocol checkout. `internal/protocol/protocol-source.json` records that provenance. The embedded ABI is synchronized with the current Protocol build; snapshot metadata pins its SHA-256 and Protocol v1 profile. Crypto source references and independent Noir/Barretenberg/Rust vectors are retained. Go FMD uses variable-time arithmetic and has not been independently audited.
 
 ```sh
 go test ./...
@@ -281,9 +261,9 @@ Encrypted output memos are opaque to this service. Present ciphertexts are opaqu
 
 ### Credit recovery block context
 
-Every indexed event and output candidate includes `block` with `number`, `hash`, `parentHash`, and `timestamp` (uint64 Unix seconds). The timestamp comes from the confirmed canonical header whose hash is used to fetch logs during indexing. Credit draw recovery must use the transition block timestamp to derive UTC+0 Gregorian day/month usage; never use local wall-clock time or caller-supplied dates. Draw transaction parameters contain no date fields. The private per-grant limits and counters remain encrypted; this service does not decrypt them. Credit draw proof widths are 20/86/314/734 fields for capacities 1/12/50/120.
+Every indexed event and output candidate includes `block` with `number`, `hash`, `parentHash`, and `timestamp` (uint64 Unix seconds). The timestamp comes from the confirmed canonical header whose hash is used to fetch logs during indexing. Credit draw recovery must use the transition block timestamp to derive UTC+0 Gregorian day/month usage; never use local wall-clock time or caller-supplied dates. Draw transaction parameters contain no date fields. The private per-grant limits and counters remain encrypted; this service does not decrypt them. Credit draw capacities are 1 through 5 and 10 through 80 in steps of 10; proof/circuit dimensions belong to the current Protocol manifest, not this indexer.
 
-Index format 2 and snapshot format 1 persist this block context in SQLite and PostgreSQL. Block records require an explicit uint64 timestamp, including zero for the Unix epoch; malformed records and unsupported formats are rejected. Snapshots use the Registry events source profile. Contract/API version remains 1.
+Index format 3 and snapshot format 2 persist this block context in SQLite and PostgreSQL. Block records require an explicit uint64 timestamp, including zero for the Unix epoch; malformed records and unsupported formats are rejected. Snapshots use the postpaid typed Credit source profile. Contract version remains 1; API version is v1.
 
 Portable snapshots retain the existing trusted publisher/checksum model. Historical timestamps restored from a snapshot inherit that trust; hash continuity and a checkpoint hash alone do not authenticate arbitrary historical normalized records. The saved checkpoint timestamp is checked against its canonical chain header before serving.
 
@@ -295,7 +275,7 @@ A registered result has `ownerAddress`, `viewingPublicKey` (33-byte hex), `clueK
 
 The returned block reference is not a proof of contract storage: callers trust the selected service for registered keys, or independently query their Chain RPC. Registry lookup performs no Chain RPC calls per request.
 
-Index format 2 includes receiving-key registry history; the current `invisi-protocol-v1-broadcaster-events` snapshot profile additionally covers Broadcaster events. Older databases and snapshots are rejected to avoid silently missing registrations: retain the old database as a backup, configure a fresh database, and rebuild from both deployment blocks. Registry address, code hash and start block are pinned in the database and snapshot profile. No automatic deletion or reset is performed.
+Index format 3 includes receiving-key and Broadcaster registry history; the current `invisi-protocol-v1-postpaid-credit-typed` snapshot profile also separates postpaid Credit state. Incompatible experimental databases and snapshots are rejected to avoid silently missing registrations or reinterpreting records. Fresh development databases index from both deployment blocks; no data is deleted automatically. Registry address, code hash and start block are pinned in the database and snapshot profile. No automatic deletion or reset is performed.
 
 The embedded registry ABI is generated from `invisi-protocol/contracts/out/InvisiAddressRegistry.sol/InvisiAddressRegistry.json`.
 
@@ -337,6 +317,6 @@ list. Clients must still verify signed quotes; registration and enabled status a
 operator declarations, not an endorsement or live availability guarantee. The RPC does not
 register services, change their data or call their endpoints.
 
-Snapshots use the `invisi-protocol-v1-broadcaster-events` source profile and pin all three
+Snapshots use the `invisi-protocol-v1-postpaid-credit-typed` source profile and pin all three
 ABIs and configured deployments. Earlier snapshot profiles must be rebuilt/exported with the
 current indexer. This does not change on-chain Protocol VERSION 1.
