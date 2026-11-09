@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -13,14 +15,21 @@ import (
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/storage"
 )
 
-func TestTypedPublicMethodsRejectMixedLegacyRoutes(t *testing.T) {
-	f, rng := anchor()
-	h := testServer(t, f, true)
-	for _, method := range []string{"invisi_getUpdates", "invisi_getTransactionUpdates", "invisi_detectOutputs", "invisi_isSpent"} {
-		r := call(t, h, method, []any{rng}, "")
-		if r.Error == nil || r.Error.Code != -32601 {
-			t.Fatalf("legacy mixed route %s remains available: %+v", method, r)
-		}
+func TestPublicMethodAllowlistAndUnknownMethod(t *testing.T) {
+	want := []string{"DetectCreditStates", "DetectNotes", "GetBlock", "GetBroadcasters", "GetCreditAllocation", "GetCreditRevocationBitmap", "GetCreditState", "GetCreditTransitions", "GetDeployment", "GetEvents", "GetMembership", "GetNote", "GetNoteUpdates", "GetReceivingAddress", "GetRoots", "GetStatus", "GetTransactionCreditUpdates", "GetTransactionNoteUpdates", "GetVersion", "IsCreditConsumed", "IsNoteSpent"}
+	sort.Strings(want)
+	typ := reflect.TypeOf((*API)(nil))
+	got := make([]string, typ.NumMethod())
+	for i := range got {
+		got[i] = typ.Method(i).Name
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("public method set: got %v, want %v", got, want)
+	}
+	f, _ := anchor()
+	r := call(t, testServer(t, f, true), "invisi_noSuchMethod", nil, "")
+	if r.Error == nil || r.Error.Code != -32601 {
+		t.Fatalf("unknown method response: %+v", r)
 	}
 }
 func TestTypedRPCSQLiteStateGrantAndTransactionBoundaries(t *testing.T) {

@@ -6,6 +6,9 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
 	"math/big"
+	"reflect"
+	"sort"
+	"strings"
 	"testing"
 )
 
@@ -14,16 +17,18 @@ func TestCurrentCreditEventContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"CreditCreated", "CreditDraw", "CreditUpdated", "CreditRevoked"} {
-		if _, ok := d.abi.Events[name]; !ok {
-			t.Errorf("missing canonical event %s", name)
+	var names []string
+	for name := range d.abi.Events {
+		if strings.HasPrefix(name, "Credit") {
+			names = append(names, name)
 		}
 	}
-	for _, name := range []string{"CreditCancelled", "CreditToppedUp"} {
-		if _, ok := d.abi.Events[name]; ok {
-			t.Errorf("obsolete prepaid event %s", name)
-		}
+	sort.Strings(names)
+	want := []string{"CreditCreated", "CreditDraw", "CreditRevoked", "CreditUpdated"}
+	if !reflect.DeepEqual(names, want) {
+		t.Fatalf("Credit event set: got %v, want %v", names, want)
 	}
+
 }
 
 func TestCreditCreationHasNoCashNoteInputsAndKeepsOwnerFeeMetadata(t *testing.T) {

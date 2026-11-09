@@ -20,7 +20,6 @@ import (
 func TestCommandDefaultDataDirectory(t *testing.T) {
 	t.Chdir(t.TempDir())
 	t.Setenv("INVISI_RPC_DATA_DIR", "")
-	t.Setenv("INVISI_RPC_CHAINS", "obsolete-invalid-list")
 	runCommand(t, "invisi-protocol-rpc", "init")
 	cfg, e := config.LoadDir(DefaultDataDir)
 	if e != nil || len(cfg.Chains) != 0 {

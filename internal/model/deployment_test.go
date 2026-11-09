@@ -2,7 +2,6 @@ package model
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -14,8 +13,21 @@ func TestDeploymentUsesSharedContractShape(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(raw), "protocolAddress") || strings.Contains(string(raw), "registryAddress") {
-		t.Fatalf("flat address aliases remain: %s", raw)
+	var profile map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &profile); err != nil {
+		t.Fatal(err)
+	}
+	if len(profile) != 3 || len(profile["chainId"]) == 0 {
+		t.Fatalf("invalid deployment profile: %s", raw)
+	}
+	for _, name := range []string{"protocol", "registry"} {
+		var contract map[string]json.RawMessage
+		if err := json.Unmarshal(profile[name], &contract); err != nil {
+			t.Fatal(err)
+		}
+		if len(contract) != 3 || len(contract["address"]) == 0 || len(contract["runtimeCodeHash"]) == 0 || len(contract["fromBlock"]) == 0 {
+			t.Fatalf("invalid %s contract shape: %s", name, profile[name])
+		}
 	}
 	var restored Deployment
 	if err := json.Unmarshal(raw, &restored); err != nil {
@@ -24,7 +36,9 @@ func TestDeploymentUsesSharedContractShape(t *testing.T) {
 	if restored.Protocol != original.Protocol || restored.RuntimeCodeHash != original.RuntimeCodeHash || restored.FromBlock != original.FromBlock || restored.Registry == nil || *restored.Registry != *original.Registry {
 		t.Fatal("deployment identity lost")
 	}
-	if err := json.Unmarshal([]byte(`{"chainId":"31337","protocolAddress":"0x0000000000000000000000000000000000001234"}`), &restored); err == nil {
-		t.Fatal("legacy flat deployment accepted")
+	for _, malformed := range []string{`{"chainId":"31337","protocol":[]}`, `{"chainId":31337}`, `{"chainId":"31337","unexpected":true}`} {
+		if err := json.Unmarshal([]byte(malformed), &restored); err == nil {
+			t.Fatalf("malformed deployment accepted: %s", malformed)
+		}
 	}
 }

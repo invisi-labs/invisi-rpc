@@ -303,12 +303,12 @@ func TestPostgresCreditBlockContextAndFormatValidation(t *testing.T) {
 	if _, err = s.Checkpoint(ctx); err == nil {
 		t.Fatal("accepted current block record missing timestamp")
 	}
-	if _, err = s.pool.Exec(ctx, "UPDATE invisi_index_formats SET version=2 WHERE deployment=$1", s.key); err != nil {
+	if _, err = s.pool.Exec(ctx, "UPDATE invisi_index_formats SET version=99 WHERE deployment=$1", s.key); err != nil {
 		t.Fatal(err)
 	}
 	if invalid, e := Open(ctx, url, dep); e == nil {
 		invalid.Close()
-		t.Fatal("accepted corrupt current index format")
+		t.Fatal("accepted unsupported index format")
 	} else if !strings.Contains(e.Error(), "unsupported index format") {
 		t.Fatal(e)
 	}

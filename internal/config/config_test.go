@@ -127,7 +127,7 @@ func TestMultiChainSaveLoadDefaultsAndIsolation(t *testing.T) {
 	}
 }
 func TestConfigRejectsInvalidMultiChain(t *testing.T) {
-	for _, kind := range []string{"duplicate-id", "shared-path", "noncanonical-id", "bad-bits", "legacy"} {
+	for _, kind := range []string{"duplicate-id", "shared-path", "noncanonical-id", "bad-bits", "chains-object"} {
 		t.Run(kind, func(t *testing.T) {
 			c := Config{Chains: []Chain{validChain("1", "one.sqlite"), validChain("10", "two.sqlite")}}
 			switch kind {
@@ -139,11 +139,11 @@ func TestConfigRejectsInvalidMultiChain(t *testing.T) {
 				c.Chains[0].Deployment.ChainID = "01"
 			case "bad-bits":
 				c.Chains[0].DetectionBits = 25
-			case "legacy":
+			case "chains-object":
 				p := filepath.Join(t.TempDir(), "config.json")
-				writeJSON(t, p, c.Chains[0])
+				writeJSON(t, p, map[string]any{"chains": map[string]any{"chainId": "1"}})
 				if _, e := Load(p); e == nil {
-					t.Fatal("legacy schema accepted")
+					t.Fatal("non-array chains accepted")
 				}
 				return
 			}

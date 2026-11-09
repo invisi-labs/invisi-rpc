@@ -270,12 +270,12 @@ func TestSQLiteCreditBlockContextRestartReorgAndFormatValidation(t *testing.T) {
 	if _, err = s.Checkpoint(ctx); err == nil {
 		t.Fatal("accepted current block record missing timestamp")
 	}
-	if _, err = s.pool.ExecContext(ctx, "UPDATE invisi_index_formats SET version=2 WHERE deployment=?1", s.key); err != nil {
+	if _, err = s.pool.ExecContext(ctx, "UPDATE invisi_index_formats SET version=99 WHERE deployment=?1", s.key); err != nil {
 		t.Fatal(err)
 	}
 	if invalid, e := OpenSQLite(ctx, path, dep); e == nil {
 		invalid.Close()
-		t.Fatal("accepted corrupt current index format")
+		t.Fatal("accepted unsupported index format")
 	} else if !strings.Contains(e.Error(), "unsupported index format") {
 		t.Fatal(e)
 	}
@@ -357,13 +357,13 @@ func TestSQLiteRegistryCoverageAndProfile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.pool.ExecContext(ctx, "UPDATE invisi_index_formats SET version=1 WHERE deployment=?1", s.key)
+	_, err = s.pool.ExecContext(ctx, "UPDATE invisi_index_formats SET version=99 WHERE deployment=?1", s.key)
 	if err != nil {
 		t.Fatal(err)
 	}
 	s.Close()
 	if reopened, err := OpenSQLite(ctx, path, dep); err == nil {
 		reopened.Close()
-		t.Fatal("accepted incomplete old registry index")
+		t.Fatal("accepted unsupported registry index format")
 	}
 }

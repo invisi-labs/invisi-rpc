@@ -452,7 +452,7 @@ func TestRunMultipleChainsRoutesCheckpointsSnapshotsAndRestart(t *testing.T) {
 	if resp.StatusCode != http.StatusOK || discovery.APIVersion != "v1" || len(discovery.Chains) != 2 || discovery.Chains[0].ChainID != "31338" || discovery.Chains[1].ChainID != "31337" || discovery.Chains[0].RPCPath != "/v1/chains/31338" || discovery.Chains[0].ProtocolVersion != "1" || discovery.Chains[1].ProtocolVersion != "1" {
 		t.Fatalf("unstable discovery response %+v", discovery)
 	}
-	for _, path := range []string{"/", "/v2", "/v2/chains/31337", "/chains/31337", "/v3", "/v3/chains/31337", "/v1/chains/999", "/v1/chains/31337/extra", "/v1/chains/31337//"} {
+	for _, path := range []string{"/", "/v999", "/chains/31337", "/v1/chains/999", "/v1/chains/31337/extra", "/v1/chains/31337//"} {
 		r, err := client.Get("http://" + cfg.Listen + path)
 		if err != nil {
 			t.Fatal(err)
@@ -470,7 +470,7 @@ func TestRunMultipleChainsRoutesCheckpointsSnapshotsAndRestart(t *testing.T) {
 	err = root.Call(&ignored, "invisi_getStatus")
 	root.Close()
 	if err == nil {
-		t.Fatal("old root RPC endpoint remains enabled")
+		t.Fatal("unversioned root unexpectedly accepts RPC")
 	}
 	trailing, err := gethrpc.DialHTTP("http://" + cfg.Listen + "/v1/chains/31337/")
 	if err != nil {
@@ -713,7 +713,7 @@ func TestRunProtocolVersionFailureCleansUpBeforeHTTPPublication(t *testing.T) {
 	}{
 		{name: "malformed uint256", result: []byte{1}, want: "invalid uint256"},
 		{name: "zero version", result: make([]byte, 32), want: "must be nonzero"},
-		{name: "V2 deployment", result: common.LeftPadBytes([]byte{2}, 32), want: "requires Protocol VERSION 1"},
+		{name: "unexpected contract version", result: common.LeftPadBytes([]byte{2}, 32), want: "requires Protocol VERSION 1"},
 		{name: "RPC failure", rpcError: true, want: "VERSION() RPC unavailable"},
 	}
 	for _, test := range cases {

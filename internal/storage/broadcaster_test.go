@@ -352,9 +352,9 @@ func TestSQLiteBroadcasterProfileCoverageGuards(t *testing.T) {
 	s.Close()
 	if store, e := OpenSQLite(ctx, path, dep); e == nil {
 		store.Close()
-		t.Fatal("legacy uncovered index accepted")
+		t.Fatal("missing Broadcaster coverage marker accepted")
 	}
-	path = filepath.Join(t.TempDir(), "old.db")
+	path = filepath.Join(t.TempDir(), "no-profile.db")
 	absent := dep
 	absent.BroadcasterRegistry = nil
 	s, e = OpenSQLite(ctx, path, absent)

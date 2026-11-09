@@ -82,7 +82,7 @@ func TestRuntimeReloadAddRemoveReaddAndRPCReplacement(t *testing.T) {
 	waitChainStatus(t, cfg.Listen, "31337", 0, done)
 	a.advanceTo.Store(2)
 	waitChainStatus(t, cfg.Listen, "31337", 2, done)
-	// A rejected replacement must keep the former RPC and route working.
+	// A rejected replacement must keep the active upstream and route working.
 	wrong := &chainRPCFixture{chainID: 99}
 	_, wrongURL := fixtureChain(t, wrong)
 	updateServiceConfig(t, dir, func(c *config.Config) { c.Chains[1].ChainRPC = wrongURL })
