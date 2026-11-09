@@ -133,11 +133,13 @@ func (d *Decoder) Decode(block model.Block, logs []types.Log) (batch model.Batch
 				return model.Batch{}, x
 			}
 			start := m["startLeafIndex"].(uint32)
-			commitments := m["commitments"]
-			if e.Name == "BatchOutputs" {
-				commitments = m["noteCommitments"]
+			var cs []common.Hash
+			switch e.Name {
+			case "CommitmentsInserted":
+				cs = hashes(m["commitments"])
+			case "BatchOutputs":
+				cs = hashes(m["noteCommitments"])
 			}
-			cs := hashes(commitments)
 			if len(cs) == 0 || uint64(start)+uint64(len(cs)) > 65536 {
 				return model.Batch{}, fmt.Errorf("%s: invalid insertion range", e.Name)
 			}
