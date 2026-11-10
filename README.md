@@ -169,7 +169,7 @@ Snapshots replay stored normalized batches and are not a trustless proof of comp
 
 ## JSON-RPC
 
-POST JSON-RPC 2.0 with positional parameter arrays to `/v1/chains/<chainId>`. `GET /v1` discovers active chains. API namespace and on-chain `VERSION()` remain `v1` / `1`; deployment runtime pins distinguish the deployed contract. This service has not been released or deployed. Its v1 business API exposes independent Note and Credit methods; mixed business methods are not available.
+POST JSON-RPC 2.0 with positional parameter arrays to `/v1/chains/<chainId>`. `GET /v1` discovers active chains. API namespace and on-chain `VERSION()` remain `v1` / `1`; deployment runtime pins distinguish the deployed contract. Service release 1.2.0 exposes independent Note and Credit methods under its v1 business API; mixed business methods are not available.
 
 | Method | Parameters | Result |
 | --- | --- | --- |
