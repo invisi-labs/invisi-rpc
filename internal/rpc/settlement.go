@@ -68,6 +68,7 @@ type settlementCursor struct {
 	From     uint64         `json:"from"`
 	Next     uint64         `json:"next"`
 	Offset   int            `json:"offset"`
+	TxOffset int            `json:"txOffset"`
 }
 type TransactionOperations struct {
 	TransactionHash   common.Hash            `json:"transactionHash"`
@@ -135,7 +136,7 @@ func (a *API) GetSettlementOperations(ctx context.Context, q OperationsQuery) (*
 	if head == nil {
 		return nil, errors.New("settlement index unavailable")
 	}
-	c := settlementCursor{Chain: a.Deployment.ChainID, Protocol: a.Deployment.Protocol, Snapshot: head.Number, Hash: head.Hash, From: a.Deployment.IndexFromBlock(), Next: a.Deployment.IndexFromBlock()}
+	c := settlementCursor{Chain: a.Deployment.ChainID, Protocol: a.Deployment.Protocol, Snapshot: head.Number, Hash: head.Hash, From: a.Deployment.FromBlock, Next: a.Deployment.FromBlock}
 	if q.Cursor != "" {
 		if len(q.Cursor) > 2048 {
 			return nil, errors.New("invalid settlement cursor")
@@ -146,7 +147,7 @@ func (a *API) GetSettlementOperations(ctx context.Context, q OperationsQuery) (*
 		}
 		d := json.NewDecoder(bytes.NewReader(raw))
 		d.DisallowUnknownFields()
-		if d.Decode(&c) != nil || d.Decode(new(any)) != io.EOF || c.Chain != a.Deployment.ChainID || c.Protocol != a.Deployment.Protocol || c.From < a.Deployment.IndexFromBlock() || c.Next < c.From || c.Next > c.Snapshot || c.Snapshot > head.Number || c.Offset < 0 || c.Offset > 2048 {
+		if d.Decode(&c) != nil || d.Decode(new(any)) != io.EOF || c.Chain != a.Deployment.ChainID || c.Protocol != a.Deployment.Protocol || c.From < a.Deployment.FromBlock || c.Next < c.From || c.Next > c.Snapshot || c.Snapshot > head.Number || c.Offset < 0 || c.Offset > 5 || c.TxOffset < 0 {
 			return nil, errors.New("invalid settlement cursor")
 		}
 		if q.FromBlock != nil || q.ToBlock != nil {
@@ -160,7 +161,7 @@ func (a *API) GetSettlementOperations(ctx context.Context, q OperationsQuery) (*
 		if q.ToBlock != nil {
 			c.Snapshot = *q.ToBlock
 		}
-		if c.From < a.Deployment.IndexFromBlock() || c.From > c.Snapshot || c.Snapshot > head.Number {
+		if c.From < a.Deployment.FromBlock || c.From > c.Snapshot || c.Snapshot > head.Number {
 			return nil, errors.New("settlement range unavailable")
 		}
 		b, e := a.Store.Block(ctx, c.Snapshot)
@@ -179,29 +180,36 @@ func (a *API) GetSettlementOperations(ctx context.Context, q OperationsQuery) (*
 	out := &OperationsPage{Operations: []settlement.Operation{}, Snapshot: operationAnchor(snap), IndexedHead: operationAnchor(head), IndirectFailureDiscovery: "unsupported_without_traces"}
 	done := false
 	receipts := 0
-	for blocks := 0; blocks < 16 && !done; blocks++ {
+replay:
+	for blocks := 0; blocks < 16; blocks++ {
 		batch, block, e := a.canonicalBlock(ctx, r, c.Next)
 		if e != nil {
 			return nil, e
 		}
-		all := []settlement.Operation{}
+		transactions := block.Transactions()
+		if c.TxOffset > len(transactions) || c.TxOffset == len(transactions) && (c.TxOffset != 0 || c.Offset != 0) {
+			return nil, errors.New("invalid settlement cursor offset")
+		}
 		hashes := map[common.Hash]bool{}
 		for _, l := range batch.Logs {
 			if l.Address == a.Deployment.Protocol {
 				hashes[l.TxHash] = true
 			}
 		}
-		for _, tx := range block.Transactions() {
-			if tx.To() != nil && *tx.To() == a.Deployment.Protocol {
-				hashes[tx.Hash()] = true
-			}
-			if !hashes[tx.Hash()] {
+		for c.TxOffset < len(transactions) {
+			tx := transactions[c.TxOffset]
+			relevant := hashes[tx.Hash()] || tx.To() != nil && *tx.To() == a.Deployment.Protocol
+			if !relevant {
+				if c.Offset != 0 {
+					return nil, errors.New("invalid settlement cursor offset")
+				}
+				c.TxOffset++
 				continue
 			}
-			receipts++
-			if receipts > 256 {
-				return nil, errors.New("settlement block receipt limit exceeded")
+			if receipts == 256 || len(out.Operations) == q.Limit {
+				break replay
 			}
+			receipts++
 			receipt, e := r.TransactionReceipt(ctx, tx.Hash())
 			if e != nil {
 				return nil, e
@@ -210,25 +218,26 @@ func (a *API) GetSettlementOperations(ctx context.Context, q OperationsQuery) (*
 			if e != nil {
 				return nil, e
 			}
-			all = append(all, ops...)
+			if c.Offset > len(ops) || c.Offset != 0 && c.Offset == len(ops) {
+				return nil, errors.New("invalid settlement cursor offset")
+			}
+			for c.Offset < len(ops) && len(out.Operations) < q.Limit {
+				out.Operations = append(out.Operations, ops[c.Offset])
+				c.Offset++
+			}
+			if c.Offset < len(ops) {
+				break replay
+			}
+			c.Offset = 0
+			c.TxOffset++
 		}
-		if c.Offset > len(all) {
-			return nil, errors.New("invalid settlement cursor offset")
-		}
-		for c.Offset < len(all) && len(out.Operations) < q.Limit {
-			out.Operations = append(out.Operations, all[c.Offset])
-			c.Offset++
-		}
-		if c.Offset < len(all) {
-			break
-		}
-		c.Offset = 0
+		c.TxOffset = 0
 		if c.Next == c.Snapshot {
 			done = true
 			break
 		}
 		c.Next++
-		if len(out.Operations) == q.Limit {
+		if len(out.Operations) == q.Limit || receipts == 256 {
 			break
 		}
 	}
