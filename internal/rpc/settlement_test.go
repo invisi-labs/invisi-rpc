@@ -10,7 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/protocol"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/settlement"
+	"github.com/invisi-lab/invisi-sdk-go/protocol/settlement"
 	"math/big"
 	"os"
 	"strings"
@@ -48,7 +48,7 @@ func (c *settlementChain) ChainID(context.Context) (*big.Int, error) {
 }
 func settlementFixture(t *testing.T) (*API, *settlementChain, *transactionBackend) {
 	t.Helper()
-	raw, e := os.ReadFile("../settlement/testdata/statements.json")
+	raw, e := os.ReadFile("testdata/settlement-statements.json")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -200,7 +200,7 @@ func TestSettlementFailedDirectAndUnsupportedIndirect(t *testing.T) {
 
 func TestSettlementAggregateNativeMembersAndPooledPull(t *testing.T) {
 	a, chain, store := settlementFixture(t)
-	raw, e := os.ReadFile("../settlement/testdata/statements.json")
+	raw, e := os.ReadFile("testdata/settlement-statements.json")
 	if e != nil {
 		t.Fatal(e)
 	}

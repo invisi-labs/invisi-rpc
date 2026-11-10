@@ -13,7 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/settlement"
+	"github.com/invisi-lab/invisi-sdk-go/protocol/settlement"
 )
 
 var transferTopic = crypto.Keccak256Hash([]byte("Transfer(address,address,uint256)"))
