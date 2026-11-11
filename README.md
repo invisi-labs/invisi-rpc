@@ -5,7 +5,7 @@ Standalone Go service for public Invisi data: canonical events, shared Note Tree
 
 ```text
 invisi-protocol-rpc (chain authentication / indexing / pagination)
-  └── invisi-sdk-go/protocol v1.2.0
+  └── invisi-sdk-go/protocol v1.2.2
       └── settlement (canonical ABI and operation binding)
 ```
 
@@ -168,7 +168,7 @@ Snapshots replay stored normalized batches and are not a trustless proof of comp
 
 ## JSON-RPC
 
-POST JSON-RPC 2.0 with positional parameter arrays to `/v1/chains/<chainId>`. `GET /v1` discovers active chains. API namespace and on-chain `VERSION()` remain `v1` / `1`; deployment runtime pins distinguish the deployed contract. Service release 1.2.0 exposes independent Note and Credit methods under its v1 business API; mixed business methods are not available.
+POST JSON-RPC 2.0 with positional parameter arrays to `/v1/chains/<chainId>`. `GET /v1` discovers active chains. API namespace and on-chain `VERSION()` remain `v1` / `1`; deployment runtime pins distinguish the deployed contract. Service release 1.2.1 exposes independent Note and Credit methods under its v1 business API; mixed business methods are not available.
 
 | Method | Parameters | Result |
 | --- | --- | --- |
@@ -339,6 +339,6 @@ A page query uses numeric block bounds and `limit` from 1 through 100. Omitted `
 
 Each public operation includes decimal-string `chainId/blockNumber/timestamp/operationIndex/memberIndex/logIndex/mainCircuitCapacity`, block and transaction hashes, `kind/tokenAddress`, separate `noteNullifiers/creditNullifiers`, separate `noteOutputs/creditOutputs`, `grantRefs`, gross `funding:[{payer,tokenAddress,amount}]`, withdrawal/fee fields, `success`, and `operationDigest`. Output locations use `noteCommitment/treeId/leafIndex`; amounts are absent unless public on chain. Credit outputs remain typed authority state and never ordinary Notes. No private opening or witness is accepted.
 
-Direct calldata is decoded with an exact generated-ABI round trip. Aggregate members retain their native capacity and original ordering. A transact digest is Keccak256 of `abi.encode(string("Invisi.Provenance.Operation.v1"),uint64(chainId),address(protocol),uint8(2),uint32(C),bytes32[] publicInputs)`, with the actual ordered `17+3*C` words including wallet authorization. The codec, source-authenticated ABI generator and independent ethers vectors live in the `settlement` package of the shared `github.com/invisi-lab/invisi-sdk-go/protocol` module (v1.2.0). RPC retains canonical chain receipt/log authentication, indexing, and pagination. BatchRequest native capacity and statement hash, typed output insertions, fee accrual, and actual ERC20 funding receipts are cross-checked. Same-token/same-payer pooled pulls are allocated by the authenticated ordered member requests, never by `tx.from`.
+Direct calldata is decoded with an exact generated-ABI round trip. Aggregate members retain their native capacity and original ordering. A transact digest is Keccak256 of `abi.encode(string("Invisi.Provenance.Operation.v1"),uint64(chainId),address(protocol),uint8(2),uint32(C),bytes32[] publicInputs)`, with the actual ordered `17+3*C` words including wallet authorization. The codec, source-authenticated ABI generator and independent ethers vectors live in the `settlement` package of the shared `github.com/invisi-lab/invisi-sdk-go/protocol` module (v1.2.2). RPC retains canonical chain receipt/log authentication, indexing, and pagination. BatchRequest native capacity and statement hash, typed output insertions, fee accrual, and actual ERC20 funding receipts are cross-checked. Same-token/same-payer pooled pulls are allocated by the authenticated ordered member requests, never by `tx.from`.
 
 A transaction lookup returns `not_found`, `pending_index`, `failed`, or `indexed`, with receipt success separate from indexing availability. Read-only full block discovery includes direct reverted Protocol transactions. Indirect successful calls with Protocol logs and indirect failed hash lookups report `indirect_call_attribution_requires_traces`; their statement, payer and outputs are not guessed. Reverted indirect calls cannot be discovered as a complete list without traces. Unsupported selectors or unauthenticated funding receipts carry an explicit `unsupportedReason`; a consumer must not recognize such operations. This is a bounded replay capability, not a claim of complete trace-backed historical discovery.

@@ -5,9 +5,14 @@ go 1.26.1
 require (
 	github.com/consensys/gnark-crypto v0.19.2
 	github.com/ethereum/go-ethereum v1.17.2
-	github.com/invisi-lab/invisi-sdk-go/protocol v1.2.0
+	github.com/invisi-lab/invisi-sdk-go/protocol v1.2.2
 	github.com/jackc/pgx/v5 v5.11.0
 	modernc.org/sqlite v1.61.0
+)
+
+require (
+	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/mitchellh/mapstructure v1.5.0 // indirect
 )
 
 require (
