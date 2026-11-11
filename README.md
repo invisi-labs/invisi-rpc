@@ -1,6 +1,6 @@
 # Invisi Protocol RPC
 
-Standalone Go service for public Invisi data: canonical events, shared Note Trees, historical membership paths and optional delegated FMD filtering. No Invisi SDK dependency. Wallet clients retain decryption, private note storage, authorization and proving, and verify results through an independent Chain RPC.
+Standalone Go service for public Invisi data: canonical events, shared Note Trees, historical membership paths. Depends only on the Go SDK protocol module, not the wallet SDK. Wallet clients retain decryption, private note storage, authorization and proving, and verify results through an independent Chain RPC.
 
 
 ```text
@@ -84,7 +84,7 @@ invisi-protocol-rpc/
 
 `init` refuses to overwrite an existing configuration. `run` resumes each checkpoint, reconciles reorganizations, and waits normally when caught up. A missing required block, log range or historical state produces a chain-specific error identifying the height; an upstream behind its saved checkpoint is rejected at startup. All chains already configured at startup must pass validation before the listener opens. Chains added while running are validated independently; an unavailable new upstream does not stop existing chains.
 
-Settings live in `config.json`; see [config.example.json](config.example.json). Each entry under `chains` contains its own `chainRpc`, deployment, database and indexing settings. `chain add --confirmations` and `--snapshot-interval` set values for that chain; edit individual entries for other policies. Chain settings are reloaded while running; changing `listen` or `maxConcurrentRequests` requires a restart. `confirmations: 0` is for local development. Choose appropriate deployed-chain depths; confirmation depth is not a consensus finality guarantee. `detectionBits` defaults to 8 and `snapshotInterval` to `6h`; use `0s` to disable exports. `listen` defaults to `127.0.0.1:8080`.
+Settings live in `config.json`; see [config.example.json](config.example.json). Each entry under `chains` contains its own `chainRpc`, deployment, database and indexing settings. `chain add --confirmations` and `--snapshot-interval` set values for that chain; edit individual entries for other policies. Chain settings are reloaded while running; changing `listen` or `maxConcurrentRequests` requires a restart. `confirmations: 0` is for local development. Choose appropriate deployed-chain depths; confirmation depth is not a consensus finality guarantee. `snapshotInterval` defaults to `6h`; use `0s` to disable exports. `listen` defaults to `127.0.0.1:8080`.
 
 ## Environment variables
 
@@ -108,7 +108,6 @@ export INVISI_RPC_LISTEN=127.0.0.1:8080
 | `INVISI_RPC_DATABASE` | `chain add --database`; default `sqlite` |
 | `INVISI_RPC_DATABASE_URL`, `DATABASE_URL` | `chain add --database-url`; PostgreSQL URL |
 | `INVISI_RPC_LISTEN` | `init/run --listen` |
-| `INVISI_RPC_DETECTION_ENABLED` | `chain add --detection-enabled`; default `true` |
 | `INVISI_RPC_CONFIRMATIONS` | `chain add --confirmations` |
 | `INVISI_RPC_SNAPSHOT_INTERVAL` | `chain add --snapshot-interval` |
 | `INVISI_RPC_SNAPSHOT` | `chain add --snapshot`; local snapshot file |
@@ -186,12 +185,10 @@ POST JSON-RPC 2.0 with positional parameter arrays to `/v1/chains/<chainId>`. `G
 | `invisi_getNote` | `[commitment, atBlock]` | `{output, membership}` for an ordinary Note, or `null` |
 | `invisi_getNoteUpdates` | `[range]` | `{blockHash, notes}`; ordinary Notes only |
 | `invisi_getTransactionNoteUpdates` | `[transactionHash]` | Availability metadata and `notes` |
-| `invisi_detectNotes` | `[range, detectionKey]` | `{blockHash, checkedBits, candidates:[{note, fallback}]}` |
 | `invisi_isNoteSpent` | `[nullifier, atBlock]` | Ordinary Note consumption through the indexed block |
 | `invisi_getCreditState` | `[commitment, atBlock]` | `{state, membership}` for Credit authority, or `null` |
 | `invisi_getCreditTransitions` | `[range]` | CreditCreated / CreditDraw / CreditUpdated / CreditRevoked events |
 | `invisi_getTransactionCreditUpdates` | `[transactionHash]` | Availability metadata, `states`, and `transitions` |
-| `invisi_detectCreditStates` | `[range, detectionKey]` | `{blockHash, checkedBits, candidates:[{state, fallback}]}` |
 | `invisi_isCreditConsumed` | `[nullifier, atBlock]` | Credit state consumption through the indexed block |
 | `invisi_getCreditAllocation` | `[owner, token, atBlock]` | `{block, shard, slot}`; next original-grant location |
 | `invisi_getCreditRevocationBitmap` | `[owner, token, shard, word, atBlock]` | `{block, bitmap}` |
@@ -211,9 +208,9 @@ A range is `{ "fromBlock": 100, "toBlock": 110, "blockHash": "0x…" }`, anchore
 
 Use `getTransactionNoteUpdates` and `getTransactionCreditUpdates` independently. Both return `transactionHash`, `status`, `indexedHead`, and optional `blockNumber`, `blockHash`, `receiptStatus`. `not_found` means no mined receipt (possibly pending); `pending_index` means its canonical block is not indexed yet; `indexed` means its indexed block was authenticated during the query. Typed collections are `null` before indexing and arrays afterward, including empty arrays for unrelated/reverted transactions. Receipt execution success is separate from availability. Other transactions in the same block are excluded. Upstream failures, predeployment transactions and observed reorganizations fail explicitly. The service reads a mined receipt and the existing local block, never substitutes upstream logs for indexed data.
 
-## Optional delegated FMD
+## Local account discovery
 
-Both typed detection methods require `detectionEnabled`, a valid detection key and a free detection slot. Configuration without the flag disables detection. Supply no viewing or spending key. Request bodies are not logged and keys are not persisted. Two scans may run concurrently. Note detection permits 1,000 deliveries; Credit detection permits 1,000 state records with two envelopes each. A Credit candidate is returned when either envelope matches; malformed nonempty clues return the complete state with `fallback:true`. Notes with intentionally omitted paired-empty envelopes are not FMD candidates. Clients decrypt and verify candidates. Valid unrelated clues cannot be distinguished from nonmatching ones, so complete recovery reads unfiltered events. Clues use 24-bit sender precision and a configurable 1–24-bit scan prefix.
+Clients fetch public Note updates and Credit transitions, then detect and decrypt locally. RPC never receives account detection keys. Status contains deployment and indexing metadata only. Remove `detectionEnabled` and `detectionBits` from chain configuration before starting this binary; strict JSON validation rejects these fields. Update SDK clients before deploying because older clients require detection metadata in status.
 
 ## HTTP gateway and overload handling
 
@@ -221,7 +218,7 @@ The service accepts public requests. Optional API authentication and per-IP or p
 
 The example limits HTTP requests by IP or recognized key. It does not meter individual JSON-RPC batch calls or their computational cost. Its rate and connection values are illustrative deployment settings, not benchmark results.
 
-The backend independently limits requests to 1 MiB, batches to 20 calls and batch responses to 16 MiB. Ranged event/update responses are limited to 8 MiB and return an explicit smaller-range error rather than partial data. Query ranges and result limits still apply. `maxConcurrentRequests` defaults to 64 (allowed range 1–4096) across all chains on the listener. Exhausting this budget returns HTTP 429 with `Retry-After: 1`. Each chain also allows two concurrent FMD scans; exhausting that budget returns JSON-RPC error `-32005` with `data.retryAfterSeconds: 1`, including within an HTTP 200 batch response.
+The backend independently limits requests to 1 MiB, batches to 20 calls and batch responses to 16 MiB. Ranged event/update responses are limited to 8 MiB and return an explicit smaller-range error rather than partial data. Query ranges and result limits still apply. `maxConcurrentRequests` defaults to 64 (allowed range 1–4096) across all chains on the listener. Exhausting this budget returns HTTP 429 with `Retry-After: 1`.
 
 Clients should use bounded exponential backoff with jitter, respecting retry guidance. Authentication failures and invalid requests require correction rather than automatic retries.
 
@@ -233,11 +230,11 @@ Clients should use bounded exponential backoff with jitter, respecting retry gui
 | `internal/app`, `internal/config` | CLI, initialization, lifecycle and settings |
 | `internal/indexer` | Chain verification, confirmed blocks and reorgs |
 | `internal/protocol` | Pinned ABI and event normalization |
-| `internal/cryptography`, `internal/merkle` | Poseidon2, Decaf377, FMD and public paths |
+| `internal/cryptography`, `internal/merkle` | Poseidon2, public Decaf377 key validation and membership paths |
 | `internal/storage`, `internal/snapshot` | SQLite/PostgreSQL and portable bootstrap |
-| `internal/rpc` | HTTP queries, limits and detection |
+| `internal/rpc` | HTTP public queries and limits |
 
-Run `go generate ./internal/protocol` to regenerate the event ABI after authenticating all artifact source hashes against the sibling Protocol checkout. `internal/protocol/protocol-source.json` records that provenance. The embedded ABI is synchronized with the current Protocol build; snapshot metadata pins its SHA-256 and Protocol v1 profile. Crypto source references and independent Noir/Barretenberg/Rust vectors are retained. Go FMD uses variable-time arithmetic and has not been independently audited.
+Run `go generate ./internal/protocol` to regenerate the event ABI after authenticating all artifact source hashes against the sibling Protocol checkout. `internal/protocol/protocol-source.json` records that provenance. The embedded ABI is synchronized with the current Protocol build; snapshot metadata pins its SHA-256 and Protocol v1 profile. Crypto source references and independent Noir/Barretenberg/Rust vectors are retained.
 
 ```sh
 go test ./...

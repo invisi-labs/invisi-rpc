@@ -18,7 +18,7 @@ func (f *registryBackend) ReceivingAddress(context.Context, common.Address) (*mo
 }
 func TestReceivingAddressWire(t *testing.T) {
 	f := &registryBackend{registration: &model.RegisteredReceivingAddress{WalletIdentity: common.HexToAddress("0x1234"), Nonce: 18446744073709551615, Block: model.Block{Number: 15}}}
-	a, err := New(f, model.Deployment{ChainID: "97", Registry: &model.ContractDeployment{Address: common.HexToAddress("0x5678"), RuntimeCodeHash: common.HexToHash("0x1234")}}, 24, false, "1")
+	a, err := New(f, model.Deployment{ChainID: "97", Registry: &model.ContractDeployment{Address: common.HexToAddress("0x5678"), RuntimeCodeHash: common.HexToHash("0x1234")}}, "1")
 	if err != nil {
 		t.Fatal(err)
 	}

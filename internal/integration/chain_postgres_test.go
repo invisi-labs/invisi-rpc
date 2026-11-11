@@ -175,17 +175,7 @@ func TestLocalChainPostgresLifecycle(t *testing.T) {
 	approval, err := approveABI.Pack("approve", protocolAddress, new(big.Int).Lsh(big.NewInt(1), 200))
 	must(t, err)
 	send(t, ctx, raw, chain, accounts[0], token, approval)
-	detectionKey := make([]byte, 32)
-	detectionKey[0] = 1
-	clueKey, err := cryptography.DeriveClueKey(detectionKey)
-	must(t, err)
-	clue, err := cryptography.CreateClueFromSeed(clueKey, make([]byte, 32))
-	must(t, err)
-	matched, err := cryptography.DetectClue(detectionKey, clue, 24)
-	must(t, err)
-	if !matched {
-		t.Fatal("generated clue does not match detection key")
-	}
+	clue := common.FromHex("0xc4fb2894eed26f15c3655e34ab124f1c0f8147d8ea545c8485f3598fffa2f50c31e3abdb4015aed7e71042430a34cae76764ca663082e17183c2bda16a95550218dfb9ad")
 	shield := func(seed uint64) *types.Receipt {
 		t.Helper()
 		header, e := chain.HeaderByNumber(ctx, nil)
@@ -235,13 +225,13 @@ func TestLocalChainPostgresLifecycle(t *testing.T) {
 	must(t, err)
 	verifyMembership(t, membership)
 
-	// HTTP JSON-RPC exercises the same handler and delegated-detection auth used by the executable.
+	// HTTP JSON-RPC exercises the same public handler used by the executable.
 	contractVersion, err := protocol.ReadVersion(ctx, chain, deployment.Protocol)
 	must(t, err)
 	if contractVersion != "1" {
 		t.Fatalf("expected deployed Protocol VERSION 1, got %s", contractVersion)
 	}
-	api, err := servicerpc.New(store, deployment, 24, true, contractVersion)
+	api, err := servicerpc.New(store, deployment, contractVersion)
 	must(t, err)
 	handler, err := servicerpc.HTTPHandler(api)
 	must(t, err)
@@ -250,21 +240,18 @@ func TestLocalChainPostgresLifecycle(t *testing.T) {
 	public, err := gethrpc.DialHTTP(server.URL)
 	must(t, err)
 	defer public.Close()
-	detected, err := gethrpc.DialOptions(ctx, server.URL)
-	must(t, err)
-	defer detected.Close()
 	var rpcMembership model.Membership
 	must(t, public.CallContext(ctx, &rpcMembership, "invisi_getMembership", output.TreeID, output.LeafIndex, firstRoot.Root))
 	verifyMembership(t, &rpcMembership)
 	anchor := servicerpc.Range{FromBlock: first.BlockNumber.Uint64(), ToBlock: first.BlockNumber.Uint64(), BlockHash: first.BlockHash}
-	var candidates servicerpc.DetectionResult
-	must(t, detected.CallContext(ctx, &candidates, "invisi_detectNotes", anchor, hexutil.Bytes(detectionKey)))
-	if len(candidates.Candidates) != 2 || candidates.CheckedBits != 24 {
-		t.Fatalf("unexpected detection response: %+v", candidates)
+	var updates servicerpc.NoteUpdates
+	must(t, public.CallContext(ctx, &updates, "invisi_getNoteUpdates", anchor))
+	if len(updates.Notes) != 2 {
+		t.Fatalf("unexpected public Note updates: %+v", updates)
 	}
-	for _, candidate := range candidates.Candidates {
-		if candidate.Fallback {
-			t.Fatal("valid clue unexpectedly used fallback")
+	for _, note := range updates.Notes {
+		if !bytes.Equal(note.Clue, clue) {
+			t.Fatal("public query changed clue bytes")
 		}
 	}
 	var rpcBlock model.Batch
@@ -281,7 +268,6 @@ func TestLocalChainPostgresLifecycle(t *testing.T) {
 	// Close every database connection and reopen without rebuilding tree state.
 	server.Close()
 	public.Close()
-	detected.Close()
 	store.Close()
 	store = nil
 	store = openStore()
@@ -328,7 +314,7 @@ func TestLocalChainPostgresLifecycle(t *testing.T) {
 	if alternateBatch.Block.Hash != alternate.BlockHash || len(alternateBatch.Outputs) != 2 {
 		t.Fatal("alternate batch missing")
 	}
-	t.Logf("real shield blocks %d/%d; tree %d; first root %s; alternate block %s; restart/history/detection/reorg verified", first.BlockNumber.Uint64(), alternate.BlockNumber.Uint64(), output.TreeID, firstRoot.Root, alternate.BlockHash)
+	t.Logf("real shield blocks %d/%d; tree %d; first root %s; alternate block %s; restart/history/public-updates/reorg verified", first.BlockNumber.Uint64(), alternate.BlockNumber.Uint64(), output.TreeID, firstRoot.Root, alternate.BlockHash)
 }
 
 type shieldParams struct {

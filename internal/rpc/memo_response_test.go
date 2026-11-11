@@ -15,7 +15,7 @@ func TestMemoUpdatesPreserveMaximumEnvelopes(t *testing.T) {
 	for i := range backend.outputs {
 		backend.outputs[i] = model.NoteOutput{Ciphertext: bytes.Repeat([]byte{5}, 754), Clue: bytes.Repeat([]byte{1}, 68)}
 	}
-	api, err := New(backend, model.Deployment{ChainID: "31337"}, 24, false, "1")
+	api, err := New(backend, model.Deployment{ChainID: "31337"}, "1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestMemoUpdatesRejectOversizedResponse(t *testing.T) {
 	for i := range backend.outputs {
 		backend.outputs[i] = model.NoteOutput{Ciphertext: bytes.Repeat([]byte{5}, 754), Clue: bytes.Repeat([]byte{1}, 68)}
 	}
-	api, err := New(backend, model.Deployment{ChainID: "31337"}, 24, false, "1")
+	api, err := New(backend, model.Deployment{ChainID: "31337"}, "1")
 	if err != nil {
 		t.Fatal(err)
 	}

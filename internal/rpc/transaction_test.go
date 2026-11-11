@@ -52,7 +52,7 @@ func transactionFixture(t *testing.T) (*API, *transactionBackend, *transactionCh
 	tx := common.HexToHash("0x1234")
 	store := &transactionBackend{fakeBackend: fakeBackend{head: &block}, batch: &model.Batch{Block: block}}
 	chain := &transactionChain{receipt: &types.Receipt{TxHash: tx, BlockNumber: big.NewInt(10), BlockHash: block.Hash, Status: 1}, header: header}
-	api, err := New(store, model.Deployment{ChainID: "31337", Protocol: common.HexToAddress("0x1234"), FromBlock: 8}, 24, false, "1")
+	api, err := New(store, model.Deployment{ChainID: "31337", Protocol: common.HexToAddress("0x1234"), FromBlock: 8}, "1")
 	if err != nil {
 		t.Fatal(err)
 	}

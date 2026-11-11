@@ -29,8 +29,6 @@ type Chain struct {
 	Deployment       model.Deployment `json:"deployment"`
 	Confirmations    uint64           `json:"confirmations"`
 	PollSeconds      int              `json:"pollSeconds"`
-	DetectionEnabled bool             `json:"detectionEnabled"`
-	DetectionBits    int              `json:"detectionBits"`
 	SnapshotInterval string           `json:"snapshotInterval"`
 }
 
@@ -95,17 +93,11 @@ func (c *Chain) Validate() error {
 	if c.PollSeconds == 0 {
 		c.PollSeconds = 3
 	}
-	if c.DetectionBits == 0 {
-		c.DetectionBits = 8
-	}
 	if c.SnapshotInterval == "" {
 		c.SnapshotInterval = "6h"
 	}
 	if c.PollSeconds < 1 || c.PollSeconds > 3600 {
 		return errors.New("pollSeconds must be between 1 and 3600")
-	}
-	if c.DetectionBits < 1 || c.DetectionBits > 24 {
-		return errors.New("detectionBits must be 1..24")
 	}
 	duration, err := time.ParseDuration(c.SnapshotInterval)
 	if err != nil || duration < 0 {

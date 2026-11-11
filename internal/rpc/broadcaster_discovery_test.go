@@ -19,7 +19,7 @@ func TestBroadcasterDiscoveryPagesUseCanonicalAnchor(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	a, err := New(store, dep, 8, false, "1")
+	a, err := New(store, dep, "1")
 	if err != nil {
 		t.Fatal(err)
 	}

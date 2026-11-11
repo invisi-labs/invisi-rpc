@@ -77,7 +77,7 @@ func replayFixture(t *testing.T, counts ...int) (*API, *replayChain, []common.Ha
 			chain.receipts[tx.Hash()] = &types.Receipt{TxHash: tx.Hash(), BlockNumber: block.Number(), BlockHash: block.Hash(), TransactionIndex: uint(j), Status: 0}
 		}
 	}
-	api, e := New(store, model.Deployment{ChainID: "56", Protocol: address, FromBlock: 10, RuntimeCodeHash: crypto.Keccak256Hash(chain.code)}, 24, false, "1")
+	api, e := New(store, model.Deployment{ChainID: "56", Protocol: address, FromBlock: 10, RuntimeCodeHash: crypto.Keccak256Hash(chain.code)}, "1")
 	if e != nil {
 		t.Fatal(e)
 	}

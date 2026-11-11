@@ -155,7 +155,7 @@ func prepareChain(ctx context.Context, c config.Chain, reconcile bool) (runtime 
 	if err != nil {
 		return nil, fmt.Errorf("validate saved index: %w", err)
 	}
-	api, err := apirpc.New(store, c.Deployment, c.DetectionBits, c.DetectionEnabled, contractVersion)
+	api, err := apirpc.New(store, c.Deployment, contractVersion)
 	if err != nil {
 		return nil, err
 	}

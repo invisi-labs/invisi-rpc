@@ -19,7 +19,7 @@ func TestBroadcasterJSONRPC(t *testing.T) {
 	if err = s.Apply(context.Background(), model.Batch{Block: model.Block{Number: 0, Hash: common.HexToHash("0x8")}}); err != nil {
 		t.Fatal(err)
 	}
-	a, err := New(s, dep, 8, false, "1")
+	a, err := New(s, dep, "1")
 	if err != nil {
 		t.Fatal(err)
 	}

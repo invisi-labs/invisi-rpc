@@ -102,7 +102,7 @@ func settlementFixture(t *testing.T) (*API, *settlementChain, *transactionBacken
 	batch.BindBlockContext()
 	store := &transactionBackend{fakeBackend: fakeBackend{head: &b}, batch: &batch}
 	code := []byte{0}
-	api, e := New(store, model.Deployment{ChainID: "56", Protocol: address, FromBlock: 10, RuntimeCodeHash: crypto.Keccak256Hash(code)}, 24, false, "1")
+	api, e := New(store, model.Deployment{ChainID: "56", Protocol: address, FromBlock: 10, RuntimeCodeHash: crypto.Keccak256Hash(code)}, "1")
 	if e != nil {
 		t.Fatal(e)
 	}

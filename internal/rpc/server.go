@@ -1,4 +1,4 @@
-// Package rpc exposes bounded public data queries and optional delegated detection.
+// Package rpc exposes bounded public data queries.
 package rpc
 
 import (
@@ -7,14 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	gethrpc "github.com/ethereum/go-ethereum/rpc"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/cryptography"
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/protocol"
 )
@@ -33,15 +30,10 @@ type Backend interface {
 	ReceivingAddress(context.Context, common.Address) (*model.RegisteredReceivingAddress, error)
 }
 type API struct {
-	Transactions     TransactionReader
-	Store            Backend
-	Deployment       model.Deployment
-	version          VersionInfo
-	DetectionBits    int
-	detectionEnabled bool
-	detectionSlots   chan struct{}
-	mu               sync.Mutex
-	prepared         map[string]*cryptography.PreparedClue
+	Transactions TransactionReader
+	Store        Backend
+	Deployment   model.Deployment
+	version      VersionInfo
 }
 type Range struct {
 	FromBlock uint64      `json:"fromBlock"`
@@ -55,27 +47,22 @@ type VersionInfo struct {
 
 type Status struct {
 	VersionInfo
-	Deployment       model.Deployment `json:"deployment"`
-	IndexedHead      *model.Block     `json:"indexedHead"`
-	DetectionEnabled bool             `json:"detectionEnabled"`
-	CheckedBits      int              `json:"checkedBits"`
+	Deployment  model.Deployment `json:"deployment"`
+	IndexedHead *model.Block     `json:"indexedHead"`
 }
 
-func New(store Backend, d model.Deployment, bits int, enabled bool, protocolVersion string) (*API, error) {
+func New(store Backend, d model.Deployment, protocolVersion string) (*API, error) {
 	if err := d.ValidateMetadata(); err != nil {
 		return nil, err
 	}
 	if protocolVersion != protocol.SupportedVersion {
 		return nil, errors.New("unsupported Protocol VERSION for " + protocol.APIVersion)
 	}
-	if bits < 1 || bits > 24 {
-		return nil, errors.New("detection bits must be 1..24")
-	}
-	return &API{Store: store, Deployment: d, DetectionBits: bits, version: VersionInfo{APIVersion: protocol.APIVersion, ProtocolVersion: protocolVersion}, detectionEnabled: enabled, detectionSlots: make(chan struct{}, 2), prepared: make(map[string]*cryptography.PreparedClue)}, nil
+	return &API{Store: store, Deployment: d, version: VersionInfo{APIVersion: protocol.APIVersion, ProtocolVersion: protocolVersion}}, nil
 }
 func (a *API) GetStatus(ctx context.Context) (Status, error) {
 	h, e := a.Store.Checkpoint(ctx)
-	return Status{VersionInfo: a.version, Deployment: a.Deployment, IndexedHead: h, DetectionEnabled: a.detectionEnabled, CheckedBits: a.DetectionBits}, e
+	return Status{VersionInfo: a.version, Deployment: a.Deployment, IndexedHead: h}, e
 }
 
 // GetDeployment is available before indexing has reached its first checkpoint.
@@ -212,77 +199,6 @@ func creditTransitions(events []model.Event) []model.Event {
 	return out
 }
 
-type Candidate struct {
-	Output   model.NoteOutput `json:"note"`
-	Fallback bool             `json:"fallback"`
-}
-type DetectionResult struct {
-	BlockHash   common.Hash `json:"blockHash"`
-	CheckedBits int         `json:"checkedBits"`
-	Candidates  []Candidate `json:"candidates"`
-}
-
-func (a *API) detectOutputs(ctx context.Context, r Range, key hexutil.Bytes) (*DetectionResult, error) {
-	if !a.detectionEnabled {
-		return nil, errors.New("delegated detection is disabled")
-	}
-	select {
-	case a.detectionSlots <- struct{}{}:
-		defer func() { <-a.detectionSlots }()
-	default:
-		return nil, capacityError{}
-	}
-	if err := cryptography.ValidateDetectionKey(key); err != nil {
-		return nil, err
-	}
-	updates, e := a.GetNoteUpdates(ctx, r)
-	if e != nil {
-		return nil, e
-	}
-	if len(updates.Notes) > 1000 {
-		return nil, errors.New("detection range exceeds 1000 deliveries; use a smaller range")
-	}
-	result := &DetectionResult{BlockHash: r.BlockHash, CheckedBits: a.DetectionBits, Candidates: []Candidate{}}
-	for _, v := range updates.Notes {
-		if e = ctx.Err(); e != nil {
-			return nil, e
-		}
-		// Deliberately omitted Funds envelopes have no FMD delivery to detect.
-		// Keep them available through getOutputs/getUpdates for commitment lookup.
-		// Credit envelopes are mandatory on chain, so an authenticated empty
-		// pair also identifies Funds change emitted by a Credit operation.
-		if len(v.Ciphertext) == 0 && len(v.Clue) == 0 {
-			continue
-		}
-		a.mu.Lock()
-		p := a.prepared[string(v.Clue)]
-		a.mu.Unlock()
-		if p == nil {
-			p, e = cryptography.PrepareClue(v.Clue)
-			if e != nil || !p.Valid() {
-				result.Candidates = append(result.Candidates, Candidate{v, true})
-				continue
-			}
-			a.mu.Lock()
-			if len(a.prepared) >= 1024 {
-				a.prepared = make(map[string]*cryptography.PreparedClue)
-			}
-			a.prepared[string(v.Clue)] = p
-			a.mu.Unlock()
-		}
-		matched, err := cryptography.DetectPreparedClue(key, p, a.DetectionBits)
-		if err != nil {
-			return nil, err
-		}
-		if matched {
-			result.Candidates = append(result.Candidates, Candidate{v, false})
-		}
-	}
-	if e = a.checkRange(ctx, r); e != nil {
-		return nil, e
-	}
-	return result, nil
-}
 func HTTPHandler(a *API) (http.Handler, error) {
 	s := gethrpc.NewServer()
 	s.SetBatchLimits(20, 16<<20)

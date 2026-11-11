@@ -2,30 +2,13 @@ package storage
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
 	"github.com/jackc/pgx/v5"
 	"math/big"
 	"strconv"
 )
 
-func (s *Store) CreditStates(ctx context.Context, from, to uint64, limit int) ([]model.CreditState, error) {
-	raw, e := s.items(ctx, "creditStates", from, to, limit)
-	if e != nil {
-		return nil, e
-	}
-	out := make([]model.CreditState, 0, len(raw))
-	for _, r := range raw {
-		var v model.CreditState
-		if e = json.Unmarshal(r, &v); e != nil {
-			return nil, e
-		}
-		out = append(out, v)
-	}
-	return out, nil
-}
 func (s *Store) ConsumedAt(ctx context.Context, hash common.Hash, at uint64, credit bool) (bool, error) {
 	table := "invisi_nullifiers"
 	if credit {

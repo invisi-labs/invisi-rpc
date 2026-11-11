@@ -14,7 +14,6 @@ import (
 
 type creditReader interface {
 	CreditState(context.Context, common.Hash, uint64) (*model.CreditStateLookup, error)
-	CreditStates(context.Context, uint64, uint64, int) ([]model.CreditState, error)
 	ConsumedAt(context.Context, common.Hash, uint64, bool) (bool, error)
 	CreditAllocationAt(context.Context, common.Address, common.Address, uint64) (string, uint16, error)
 	CreditBitmapAt(context.Context, common.Address, common.Address, string, uint8, uint64) (string, error)

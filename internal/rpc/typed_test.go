@@ -2,9 +2,7 @@ package rpc
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -16,7 +14,7 @@ import (
 )
 
 func TestPublicMethodAllowlistAndUnknownMethod(t *testing.T) {
-	want := []string{"DetectCreditStates", "DetectNotes", "GetBlock", "GetBroadcasters", "GetCreditAllocation", "GetCreditRevocationBitmap", "GetCreditState", "GetCreditTransitions", "GetDeployment", "GetEvents", "GetMembership", "GetNote", "GetNoteUpdates", "GetReceivingAddress", "GetSettlementOperations", "GetProtocolTransactions", "GetTransactionOperations", "GetRoots", "GetStatus", "GetTransactionCreditUpdates", "GetTransactionNoteUpdates", "GetVersion", "IsCreditConsumed", "IsNoteSpent"}
+	want := []string{"GetBlock", "GetBroadcasters", "GetCreditAllocation", "GetCreditRevocationBitmap", "GetCreditState", "GetCreditTransitions", "GetDeployment", "GetEvents", "GetMembership", "GetNote", "GetNoteUpdates", "GetReceivingAddress", "GetSettlementOperations", "GetProtocolTransactions", "GetTransactionOperations", "GetRoots", "GetStatus", "GetTransactionCreditUpdates", "GetTransactionNoteUpdates", "GetVersion", "IsCreditConsumed", "IsNoteSpent"}
 	sort.Strings(want)
 	typ := reflect.TypeOf((*API)(nil))
 	got := make([]string, typ.NumMethod())
@@ -27,7 +25,7 @@ func TestPublicMethodAllowlistAndUnknownMethod(t *testing.T) {
 		t.Fatalf("public method set: got %v, want %v", got, want)
 	}
 	f, _ := anchor()
-	r := call(t, testServer(t, f, true), "invisi_noSuchMethod", nil, "")
+	r := call(t, testServer(t, f), "invisi_noSuchMethod", nil, "")
 	if r.Error == nil || r.Error.Code != -32601 {
 		t.Fatalf("unknown method response: %+v", r)
 	}
@@ -95,52 +93,5 @@ func TestTypedRPCSQLiteStateGrantAndTransactionBoundaries(t *testing.T) {
 	bm, e := api.GetCreditRevocationBitmap(ctx, owner, token, "1", 0, 10)
 	if e != nil || bm.Bitmap != "0" {
 		t.Fatalf("bitmap %+v %v", bm, e)
-	}
-	if _, e = api.DetectCreditStates(ctx, rng, make([]byte, 32)); e == nil {
-		t.Fatal("disabled detection accepted")
-	}
-}
-
-func TestCreditDetectionKeepsBothEnvelopesAndNoNotes(t *testing.T) {
-	ctx := context.Background()
-	api, fake, _, tx := transactionFixture(t)
-	api.Deployment.FromBlock = 10
-	s, e := storage.OpenSQLite(ctx, filepath.Join(t.TempDir(), "detection.db"), api.Deployment)
-	if e != nil {
-		t.Fatal(e)
-	}
-	defer s.Close()
-	api.Store = s
-	api.detectionEnabled = true
-	// A malformed clue must remain recoverable without guessing the recipient role.
-	b := *fake.batch
-	b.CreditStates = []model.CreditState{{TransactionHash: tx, Deliveries: []model.Delivery{{Clue: []byte{255}, Ciphertext: []byte{1}}, {Clue: []byte{255}, Ciphertext: []byte{2}}}}}
-	if e = s.Apply(ctx, b); e != nil {
-		t.Fatal(e)
-	}
-	raw, e := os.ReadFile("../cryptography/testdata/fmd-rust-vectors.json")
-	if e != nil {
-		t.Fatal(e)
-	}
-	var vectors struct {
-		Vectors []struct {
-			DetectionKey string `json:"detectionKey"`
-		}
-	}
-	if e = json.Unmarshal(raw, &vectors); e != nil {
-		t.Fatal(e)
-	}
-	key, e := hex.DecodeString(vectors.Vectors[0].DetectionKey)
-	if e != nil {
-		t.Fatal(e)
-	}
-	rng := Range{10, 10, b.Block.Hash}
-	v, e := api.DetectCreditStates(ctx, rng, key)
-	if e != nil || len(v.Candidates) != 1 || !v.Candidates[0].Fallback || len(v.Candidates[0].State.Deliveries) != 2 {
-		t.Fatalf("Credit detection %+v %v", v, e)
-	}
-	notes, e := api.DetectNotes(ctx, rng, key)
-	if e != nil || len(notes.Candidates) != 0 {
-		t.Fatalf("Credit leaked through Note detection %+v %v", notes, e)
 	}
 }

@@ -5,7 +5,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/cryptography"
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
 	"testing"
 )
@@ -22,12 +21,7 @@ func TestRegistryEventsBoundToDeployment(t *testing.T) {
 		t.Fatal(err)
 	}
 	event := parsed.Events["ReceivingKeysSet"]
-	detection := make([]byte, 32)
-	detection[0] = 1
-	clue, err := cryptography.DeriveClueKey(detection)
-	if err != nil {
-		t.Fatal(err)
-	}
+	clue := common.FromHex("0x22cc5388aa3fc0fe62176e39b58c006162a79bd1013f2549cbd42f9b328bdc0c")
 	data, err := event.Inputs.NonIndexed().Pack(common.FromHex("0x0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), common.BytesToHash(clue), uint64(18446744073709551615))
 	if err != nil {
 		t.Fatal(err)

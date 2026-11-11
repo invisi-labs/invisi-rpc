@@ -114,7 +114,7 @@ func TestMultiChainSaveLoadDefaultsAndIsolation(t *testing.T) {
 		t.Fatalf("loaded %+v", c)
 	}
 	for _, chain := range c.Chains {
-		if !filepath.IsAbs(chain.Database.Path) || !strings.HasPrefix(chain.Database.Path, dir) || chain.PollSeconds != 3 || chain.DetectionBits != 8 || chain.SnapshotInterval != "6h" {
+		if !filepath.IsAbs(chain.Database.Path) || !strings.HasPrefix(chain.Database.Path, dir) || chain.PollSeconds != 3 || chain.SnapshotInterval != "6h" {
 			t.Fatalf("defaults/path %+v", chain)
 		}
 	}
@@ -127,7 +127,7 @@ func TestMultiChainSaveLoadDefaultsAndIsolation(t *testing.T) {
 	}
 }
 func TestConfigRejectsInvalidMultiChain(t *testing.T) {
-	for _, kind := range []string{"duplicate-id", "shared-path", "noncanonical-id", "bad-bits", "chains-object"} {
+	for _, kind := range []string{"duplicate-id", "shared-path", "noncanonical-id", "chains-object"} {
 		t.Run(kind, func(t *testing.T) {
 			c := Config{Chains: []Chain{validChain("1", "one.sqlite"), validChain("10", "two.sqlite")}}
 			switch kind {
@@ -137,8 +137,6 @@ func TestConfigRejectsInvalidMultiChain(t *testing.T) {
 				c.Chains[1].Database.Path = "sub/../one.sqlite"
 			case "noncanonical-id":
 				c.Chains[0].Deployment.ChainID = "01"
-			case "bad-bits":
-				c.Chains[0].DetectionBits = 25
 			case "chains-object":
 				p := filepath.Join(t.TempDir(), "config.json")
 				writeJSON(t, p, map[string]any{"chains": map[string]any{"chainId": "1"}})
@@ -232,7 +230,7 @@ func TestUpdateFailuresPreserveBytes(t *testing.T) {
 				case "mutator":
 					return errors.New("failure")
 				case "invalid":
-					c.Chains[0].DetectionBits = 25
+					c.Chains[0].Deployment.ChainID = "invalid"
 				case "cancel":
 					cancel()
 				case "destination-path":
@@ -397,7 +395,29 @@ func TestPublishedConfigurationExample(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.MaxConcurrentRequests != 64 || len(cfg.Chains) != 1 || !cfg.Chains[0].DetectionEnabled {
+	if cfg.MaxConcurrentRequests != 64 || len(cfg.Chains) != 1 {
 		t.Fatalf("unexpected example configuration: %+v", cfg)
+	}
+}
+
+func TestConfigRejectsRemovedDetectionSettings(t *testing.T) {
+	for _, field := range []string{"detectionEnabled", "detectionBits"} {
+		t.Run(field, func(t *testing.T) {
+			dir := t.TempDir()
+			c := Config{Chains: []Chain{validChain("1", "one.sqlite")}}
+			raw, err := json.Marshal(c)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var doc map[string]any
+			if err := json.Unmarshal(raw, &doc); err != nil {
+				t.Fatal(err)
+			}
+			doc["chains"].([]any)[0].(map[string]any)[field] = 1
+			writeJSON(t, File(dir), doc)
+			if _, err := LoadDir(dir); err == nil || !strings.Contains(err.Error(), field) {
+				t.Fatalf("obsolete setting accepted: %v", err)
+			}
+		})
 	}
 }

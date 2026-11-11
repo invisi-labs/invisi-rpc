@@ -3,11 +3,9 @@ package rpc
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 
@@ -51,9 +49,9 @@ func (f *fakeBackend) Outputs(context.Context, uint64, uint64, int) ([]model.Not
 	return f.outputs, nil
 }
 func (f *fakeBackend) IsSpent(context.Context, common.Hash) (bool, error) { return false, nil }
-func testServer(t *testing.T, f *fakeBackend, enabled bool) http.Handler {
+func testServer(t *testing.T, f *fakeBackend) http.Handler {
 	t.Helper()
-	a, err := New(f, model.Deployment{ChainID: "31337", Protocol: common.HexToAddress("1234"), FromBlock: 8}, 24, enabled, "1")
+	a, err := New(f, model.Deployment{ChainID: "31337", Protocol: common.HexToAddress("1234"), FromBlock: 8}, "1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +103,7 @@ func anchor() (*fakeBackend, Range) {
 }
 func TestHTTPStatusAndUnknownMethod(t *testing.T) {
 	f, _ := anchor()
-	h := testServer(t, f, false)
+	h := testServer(t, f)
 	r := call(t, h, "invisi_getStatus", []any{}, "")
 	if r.Error != nil {
 		t.Fatal(r.Error)
@@ -114,7 +112,7 @@ func TestHTTPStatusAndUnknownMethod(t *testing.T) {
 	if err := json.Unmarshal(r.Result, &raw); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"apiVersion", "protocolVersion", "deployment", "indexedHead", "detectionEnabled", "checkedBits"} {
+	for _, name := range []string{"apiVersion", "protocolVersion", "deployment", "indexedHead"} {
 		if _, ok := raw[name]; !ok {
 			t.Errorf("missing status wire field %q", name)
 		}
@@ -123,7 +121,7 @@ func TestHTTPStatusAndUnknownMethod(t *testing.T) {
 	if err := json.Unmarshal(r.Result, &s); err != nil {
 		t.Fatal(err)
 	}
-	if s.APIVersion != "v1" || s.ProtocolVersion != "1" || s.Deployment.ChainID != "31337" || s.IndexedHead.Number != 10 || s.DetectionEnabled || s.CheckedBits != 24 {
+	if s.APIVersion != "v1" || s.ProtocolVersion != "1" || s.Deployment.ChainID != "31337" || s.IndexedHead.Number != 10 {
 		t.Fatalf("unexpected status %s", r.Result)
 	}
 	versionResult := call(t, h, "invisi_getVersion", []any{}, "")
@@ -145,7 +143,7 @@ func TestHTTPStrictRangeAnchors(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			f, _ := anchor()
-			r := call(t, testServer(t, f, false), "invisi_getEvents", []any{tc.r}, "")
+			r := call(t, testServer(t, f), "invisi_getEvents", []any{tc.r}, "")
 			if r.Error == nil {
 				t.Fatalf("accepted invalid range: %s", r.Result)
 			}
@@ -156,113 +154,20 @@ func TestHTTPStrictRangeAnchors(t *testing.T) {
 	}
 	f, _ := anchor()
 	f.events = []model.Event{{Name: "Shield"}}
-	r := call(t, testServer(t, f, false), "invisi_getEvents", []any{good}, "")
+	r := call(t, testServer(t, f), "invisi_getEvents", []any{good}, "")
 	if r.Error != nil || f.blockReads != 2 {
 		t.Fatalf("valid range failed: %+v", r)
 	}
 	f, _ = anchor()
 	f.reorgAfter = 1
-	r = call(t, testServer(t, f, false), "invisi_getEvents", []any{good}, "")
+	r = call(t, testServer(t, f), "invisi_getEvents", []any{good}, "")
 	if r.Error == nil || !strings.Contains(r.Error.Message, "reorganized") {
 		t.Fatalf("did not reject reorg during query: %+v", r)
 	}
 }
-func TestDisabledDetectionCannotBeEnabledByRequestHeaders(t *testing.T) {
-	for _, header := range []string{"", "Bearer arbitrary", "wrong-scheme"} {
-		f, rng := anchor()
-		result := call(t, testServer(t, f, false), "invisi_detectNotes", []any{rng, "0x" + strings.Repeat("01", 32)}, header)
-		if result.Error == nil || !strings.Contains(result.Error.Message, "disabled") {
-			t.Fatalf("disabled detection accepted: %+v", result)
-		}
-		if f.outputReads != 0 {
-			t.Fatal("disabled detection read output data")
-		}
-	}
-}
-func TestHTTPDetectionRustVectorAndTransitions(t *testing.T) {
-	fixture, err := os.ReadFile("../cryptography/testdata/fmd-rust-vectors.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var vectors struct {
-		Vectors []struct {
-			DetectionKey      string
-			OtherDetectionKey string
-			Clue              string
-			OtherMatches      []bool
-		}
-	}
-	if err = json.Unmarshal(fixture, &vectors); err != nil {
-		t.Fatal(err)
-	}
-	if len(vectors.Vectors) == 0 {
-		t.Fatal("no Rust vectors")
-	}
-	v := vectors.Vectors[0]
-	if v.OtherMatches[23] {
-		t.Fatal("fixture must reject wrong key at 24 bits")
-	}
-	clue, err := hex.DecodeString(v.Clue)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, tc := range []struct {
-		name, key string
-		wantValid bool
-	}{{"correct key", v.DetectionKey, true}, {"wrong key", v.OtherDetectionKey, false}} {
-		t.Run(tc.name, func(t *testing.T) {
-			f, rng := anchor()
-			f.head.Timestamp = 2678400
-			f.outputs = []model.NoteOutput{{Block: *f.head, Commitment: common.HexToHash("01"), Clue: clue}, {Block: *f.head, Commitment: common.HexToHash("02"), Clue: []byte{0xff}}}
-			f.outputs = append(f.outputs, model.NoteOutput{Block: *f.head, Kind: "BatchOutputs", Commitment: common.HexToHash("03")})
-			for _, kind := range []string{"Shield", "Transact", "CrossTreeTransact"} {
-				f.outputs = append(f.outputs, model.NoteOutput{Block: *f.head, Kind: kind, Commitment: common.HexToHash("04")})
-			}
-			f.events = []model.Event{{Name: "Shield"}, {Block: *f.head, Name: "CreditDraw", Data: json.RawMessage(`{"params":{"creditCommitments":[]}}`)}, {Name: "CreditRevoked"}}
-			transport := call(t, testServer(t, f, true), "invisi_getNoteUpdates", []any{rng}, "")
-			if transport.Error != nil {
-				t.Fatal(transport.Error)
-			}
-			var updates NoteUpdates
-			if err := json.Unmarshal(transport.Result, &updates); err != nil || len(updates.Notes) != len(f.outputs) {
-				t.Fatalf("no-envelope outputs missing from transport: %s (%v)", transport.Result, err)
-			}
-			r := call(t, testServer(t, f, true), "invisi_detectNotes", []any{rng, "0x" + tc.key}, "")
-			if r.Error != nil {
-				t.Fatal(r.Error)
-			}
-			var result DetectionResult
-			if err = json.Unmarshal(r.Result, &result); err != nil {
-				t.Fatal(err)
-			}
-			want := 1
-			if tc.wantValid {
-				want = 2
-			}
-			if result.CheckedBits != 24 || result.BlockHash != rng.BlockHash || len(result.Candidates) != want {
-				t.Fatalf("unexpected detection %s", r.Result)
-			}
-			fallback := result.Candidates[len(result.Candidates)-1]
-			if fallback.Output.Block != *f.head {
-				t.Fatal("detection lost canonical block context")
-			}
-
-			if !fallback.Fallback || fallback.Output.Commitment != f.outputs[1].Commitment {
-				t.Fatal("malformed clue was not preserved as fallback")
-			}
-			if tc.wantValid && (result.Candidates[0].Fallback || result.Candidates[0].Output.Commitment != f.outputs[0].Commitment) {
-				t.Fatal("correct Rust vector not matched")
-			}
-			if bytes.Contains(r.Result, []byte("creditTransitions")) {
-				t.Fatal("Note detection exposed Credit transitions")
-			}
-
-		})
-	}
-}
 func TestHTTPMethodAndBodyLimits(t *testing.T) {
 	f, _ := anchor()
-	h := testServer(t, f, false)
+	h := testServer(t, f)
 	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete} {
 		r := httptest.NewRequest(method, "/", nil)
 		w := httptest.NewRecorder()
@@ -280,75 +185,10 @@ func TestHTTPMethodAndBodyLimits(t *testing.T) {
 	}
 }
 
-func TestHTTPExactLengthMalformedCluesFallback(t *testing.T) {
-	data, err := os.ReadFile("../cryptography/testdata/fmd-rust-vectors.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var fixture struct {
-		Vectors []struct{ DetectionKey, Clue string }
-	}
-	if err = json.Unmarshal(data, &fixture); err != nil {
-		t.Fatal(err)
-	}
-	vector := fixture.Vectors[0]
-	valid, err := hex.DecodeString(vector.Clue)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, kind := range []string{"precision23", "invalid point", "noncanonical scalar", "identity point"} {
-		t.Run(kind, func(t *testing.T) {
-			clue := append([]byte(nil), valid...)
-			switch kind {
-			case "precision23":
-				clue[64] = 23
-			case "invalid point":
-				clue[0] |= 1
-			case "noncanonical scalar":
-				for i := 32; i < 64; i++ {
-					clue[i] = 255
-				}
-			case "identity point":
-				clear(clue[:32])
-			}
-			if len(clue) != 68 {
-				t.Fatal("fixture is not an exact-length clue")
-			}
-			f, rng := anchor()
-			f.outputs = []model.NoteOutput{{Clue: clue, Commitment: common.HexToHash("123")}}
-			r := call(t, testServer(t, f, true), "invisi_detectNotes", []any{rng, "0x" + vector.DetectionKey}, "")
-			if r.Error != nil {
-				t.Fatal(r.Error)
-			}
-			var result DetectionResult
-			if err = json.Unmarshal(r.Result, &result); err != nil {
-				t.Fatal(err)
-			}
-			if len(result.Candidates) != 1 || !result.Candidates[0].Fallback || !bytes.Equal(result.Candidates[0].Output.Clue, clue) {
-				t.Fatalf("malformed 68-byte clue lost fallback: %s", r.Result)
-			}
-		})
-	}
-}
-func TestHTTPInvalidDetectionKeysFailOnEmptyRange(t *testing.T) {
-	for _, tc := range []struct{ name, key string }{{"zero", strings.Repeat("00", 32)}, {"noncanonical", strings.Repeat("ff", 32)}} {
-		t.Run(tc.name, func(t *testing.T) {
-			f, rng := anchor()
-			r := call(t, testServer(t, f, true), "invisi_detectNotes", []any{rng, "0x" + tc.key}, "")
-			if r.Error == nil {
-				t.Fatalf("invalid 32-byte key accepted on empty range: %s", r.Result)
-			}
-			if f.outputReads != 0 || f.blockReads != 0 {
-				t.Fatal("invalid key read backend before rejection")
-			}
-		})
-	}
-}
-
 func TestRejectUnsupportedProtocolVersion(t *testing.T) {
 	f, _ := anchor()
 	for _, v := range []string{"", "0", "2", "3"} {
-		if _, err := New(f, model.Deployment{}, 8, false, v); err == nil {
+		if _, err := New(f, model.Deployment{}, v); err == nil {
 			t.Fatalf("accepted incompatible Protocol VERSION %q", v)
 		}
 	}
@@ -356,7 +196,7 @@ func TestRejectUnsupportedProtocolVersion(t *testing.T) {
 
 func TestDeploymentWithoutIndexedHead(t *testing.T) {
 	d := model.Deployment{ChainID: "31337", Protocol: common.HexToAddress("1234"), RuntimeCodeHash: common.HexToHash("4567"), FromBlock: 8, Registry: &model.ContractDeployment{Address: common.HexToAddress("5678"), RuntimeCodeHash: common.HexToHash("6789"), FromBlock: 9}}
-	a, err := New(&fakeBackend{}, d, 24, false, "1")
+	a, err := New(&fakeBackend{}, d, "1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -380,49 +220,13 @@ func TestDeploymentWithoutIndexedHead(t *testing.T) {
 	}
 }
 
-func TestPublicDetectionNeedsNoAPIKey(t *testing.T) {
-	f, rng := anchor()
-	result := call(t, testServer(t, f, true), "invisi_detectNotes", []any{rng, "0x" + strings.Repeat("01", 32)}, "")
-	if result.Error != nil {
-		t.Fatalf("enabled public detection rejected: %+v", result.Error)
-	}
-	if f.outputReads != 1 {
-		t.Fatal("enabled detection did not read candidates")
-	}
-}
-
-func TestDetectionCapacityReturnsRetryableRPCError(t *testing.T) {
-	f, rng := anchor()
-	api, err := New(f, model.Deployment{ChainID: "31337"}, 24, true, "1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for range cap(api.detectionSlots) {
-		api.detectionSlots <- struct{}{}
-	}
-	handler, err := HTTPHandler(api)
-	if err != nil {
-		t.Fatal(err)
-	}
-	result := call(t, handler, "invisi_detectNotes", []any{rng, "0x" + strings.Repeat("01", 32)}, "")
-	if result.Error == nil || result.Error.Code != -32005 {
-		t.Fatalf("wrong overload error: %+v", result.Error)
-	}
-	if f.outputReads != 0 {
-		t.Fatal("overloaded detection read backend")
-	}
-	if status := call(t, handler, "invisi_getStatus", []any{}, ""); status.Error != nil {
-		t.Fatal("detection overload blocked ordinary queries")
-	}
-}
-
 func TestCreditEndpointsPreserveConfirmedBlockContext(t *testing.T) {
 	f, rng := anchor()
 	b := *f.head
 	b.Timestamp = 2678400
 	f.events = []model.Event{{Block: b, Name: "CreditDraw", Data: json.RawMessage(`{"params":{"creditCommitments":[]}}`)}}
 	f.outputs = []model.NoteOutput{{Block: b, Kind: "CreditDraw", Ciphertext: bytes.Repeat([]byte{5}, 754), Clue: []byte{255}}}
-	h := testServer(t, f, true)
+	h := testServer(t, f)
 	for _, method := range []string{"invisi_getCreditTransitions"} {
 		params := []any{rng}
 		r := call(t, h, method, params, "")
@@ -467,7 +271,7 @@ func TestHTTPRangeBoundaryAndAnchorReads(t *testing.T) {
 					if tc.zeroHash {
 						rng.BlockHash = common.Hash{}
 					}
-					r := call(t, testServer(t, f, false), method, []any{rng}, "")
+					r := call(t, testServer(t, f), method, []any{rng}, "")
 					if (r.Error != nil) != tc.wantError {
 						t.Fatalf("unexpected result: %+v", r)
 					}
@@ -482,7 +286,7 @@ func TestHTTPRangeBoundaryAndAnchorReads(t *testing.T) {
 			}
 			f, rng := anchor()
 			f.reorgAfter = 1
-			r := call(t, testServer(t, f, false), method, []any{rng}, "")
+			r := call(t, testServer(t, f), method, []any{rng}, "")
 			if r.Error == nil || !strings.Contains(r.Error.Message, "reorganized") {
 				t.Fatalf("accepted reorg: %+v", r)
 			}
@@ -501,7 +305,7 @@ func TestHTTPRangeEventCapsBeforeTransitionFilter(t *testing.T) {
 					// Even non-credit events retain their original response-size cap.
 					f.events = []model.Event{{Name: "Shield", Data: json.RawMessage(`"` + strings.Repeat("x", maxRangeResponseBytes) + `"`)}}
 				}
-				r := call(t, testServer(t, f, false), method, []any{rng}, "")
+				r := call(t, testServer(t, f), method, []any{rng}, "")
 				if r.Error == nil || !strings.Contains(r.Error.Message, "smaller ranges") {
 					t.Fatalf("accepted oversized event data: %+v", r)
 				}
@@ -516,7 +320,7 @@ func (f *fakeBackend) Note(context.Context, common.Hash, uint64) (*model.NoteLoo
 
 func TestNoteLookupRPC(t *testing.T) {
 	f := &fakeBackend{head: &model.Block{Number: 10, Hash: common.HexToHash("10")}}
-	h := testServer(t, f, false)
+	h := testServer(t, f)
 	if r := call(t, h, "invisi_getNote", []any{common.HexToHash("1"), 10}, ""); r.Error != nil || string(r.Result) != "null" {
 		t.Fatalf("missing note: %+v", r)
 	}

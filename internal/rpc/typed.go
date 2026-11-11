@@ -7,14 +7,11 @@ import (
 
 	"github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/cryptography"
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
 )
 
 type typedBackend interface {
 	CreditState(context.Context, common.Hash, uint64) (*model.CreditStateLookup, error)
-	CreditStates(context.Context, uint64, uint64, int) ([]model.CreditState, error)
 	ConsumedAt(context.Context, common.Hash, uint64, bool) (bool, error)
 	CreditAllocationAt(context.Context, common.Address, common.Address, uint64) (string, uint16, error)
 	CreditBitmapAt(context.Context, common.Address, common.Address, string, uint8, uint64) (string, error)
@@ -112,88 +109,6 @@ func (a *API) IsNoteSpent(ctx context.Context, h common.Hash, n uint64) (bool, e
 }
 func (a *API) IsCreditConsumed(ctx context.Context, h common.Hash, n uint64) (bool, error) {
 	return a.consumed(ctx, h, n, true)
-}
-
-type NoteCandidate struct {
-	Note     model.NoteOutput `json:"note"`
-	Fallback bool             `json:"fallback"`
-}
-type CreditCandidate struct {
-	State    model.CreditState `json:"state"`
-	Fallback bool              `json:"fallback"`
-}
-type NoteDetection struct {
-	BlockHash   common.Hash     `json:"blockHash"`
-	CheckedBits int             `json:"checkedBits"`
-	Candidates  []NoteCandidate `json:"candidates"`
-}
-type CreditDetection struct {
-	BlockHash   common.Hash       `json:"blockHash"`
-	CheckedBits int               `json:"checkedBits"`
-	Candidates  []CreditCandidate `json:"candidates"`
-}
-
-func (a *API) DetectNotes(ctx context.Context, r Range, key hexutil.Bytes) (*NoteDetection, error) {
-	v, e := a.detectOutputs(ctx, r, key)
-	if e != nil {
-		return nil, e
-	}
-	out := &NoteDetection{r.BlockHash, a.DetectionBits, []NoteCandidate{}}
-	for _, c := range v.Candidates {
-		out.Candidates = append(out.Candidates, NoteCandidate{c.Output, c.Fallback})
-	}
-	return out, nil
-}
-func (a *API) DetectCreditStates(ctx context.Context, r Range, key hexutil.Bytes) (*CreditDetection, error) {
-	if !a.detectionEnabled {
-		return nil, errors.New("delegated detection is disabled")
-	}
-	select {
-	case a.detectionSlots <- struct{}{}:
-		defer func() { <-a.detectionSlots }()
-	default:
-		return nil, capacityError{}
-	}
-	if e := cryptography.ValidateDetectionKey(key); e != nil {
-		return nil, e
-	}
-	if e := a.checkRange(ctx, r); e != nil {
-		return nil, e
-	}
-	s, e := a.typed()
-	if e != nil {
-		return nil, e
-	}
-	vs, e := s.CreditStates(ctx, r.FromBlock, r.ToBlock, 1000)
-	if e != nil {
-		return nil, e
-	}
-	out := &CreditDetection{r.BlockHash, a.DetectionBits, []CreditCandidate{}}
-	for _, v := range vs {
-		if e = ctx.Err(); e != nil {
-			return nil, e
-		}
-		fallback, match := len(v.Deliveries) != 2, false
-		for _, delivery := range v.Deliveries {
-			p, err := cryptography.PrepareClue(delivery.Clue)
-			if err != nil || !p.Valid() {
-				fallback = true
-				continue
-			}
-			matched, err := cryptography.DetectPreparedClue(key, p, a.DetectionBits)
-			if err != nil {
-				return nil, err
-			}
-			match = match || matched
-		}
-		if fallback || match {
-			out.Candidates = append(out.Candidates, CreditCandidate{v, fallback})
-		}
-	}
-	if e = checkResponseSize(out); e != nil {
-		return nil, e
-	}
-	return out, a.checkRange(ctx, r)
 }
 
 type CreditAllocation struct {

@@ -1,68 +1,12 @@
 package cryptography
 
-// Ported from invisi-sdk-go/core, wallet-transition research snapshot (2026-10-23),
-// revision 1b78d5929ac79de83bc99a70bcfb9b904ce2c1d3.
-// This standalone copy has no SDK dependency; independent fixtures preserve compatibility.
-
-// Decaf377 encoding follows decaf377 0.10.1 min_curve/element.rs exactly.
-// The underlying Edwards arithmetic and field square roots use gnark-crypto's
-// BLS12-377 twisted Edwards implementation, with the Rust Decaf generator.
-// The codec composition is unaudited; scalar multiplication and big.Int do not
-// offer a constant-time guarantee. It is not a hardened secret-key backend.
 import (
 	"fmt"
-	"math/big"
-
 	decafq "github.com/consensys/gnark-crypto/ecc/bls12-377/fr"
 	"github.com/consensys/gnark-crypto/ecc/bls12-377/twistededwards"
 )
 
-var decafScalarOrder = decafMustInteger("2111115437357092606062206234695386632838870926408408195193685246394721360383")
-var decafGenerator = func() twistededwards.PointAffine {
-	// gnark extended multiplication assumes curve parameters were initialized.
-	_ = twistededwards.GetEdwardsCurve()
-	var p twistededwards.PointAffine
-	p.X.SetString("4959445789346820725352484487855828915252512307947624787834978378872129235627")
-	p.Y.SetString("6060471950081851567114691557659790004756535011754163002297540472747064943288")
-	return p
-}()
-
-func decafMustInteger(s string) *big.Int {
-	n, ok := new(big.Int).SetString(s, 10)
-	if !ok {
-		panic("invalid internal Decaf constant")
-	}
-	return n
-}
-func decafReadLE(input []byte) *big.Int {
-	rev := make([]byte, len(input))
-	for i, v := range input {
-		rev[len(input)-1-i] = v
-	}
-	return new(big.Int).SetBytes(rev)
-}
-func decafWriteLE(n *big.Int) [32]byte {
-	var b [32]byte
-	n.FillBytes(b[:])
-	for i := 0; i < 16; i++ {
-		b[i], b[31-i] = b[31-i], b[i]
-	}
-	return b
-}
-func decafEncodeField(n decafq.Element) [32]byte {
-	b := n.Bytes()
-	for i := 0; i < 16; i++ {
-		b[i], b[31-i] = b[31-i], b[i]
-	}
-	return b
-}
 func decafNegative(n *decafq.Element) bool { return n.Bits()[0]&1 != 0 }
-func decafAbs(n decafq.Element) decafq.Element {
-	if decafNegative(&n) {
-		n.Neg(&n)
-	}
-	return n
-}
 func decafDecode(input []byte) (twistededwards.PointAffine, error) {
 	var p twistededwards.PointAffine
 	if len(input) != 32 || input[31]>>5 != 0 || input[0]&1 != 0 {
@@ -108,38 +52,4 @@ func decafDecode(input []byte) (twistededwards.PointAffine, error) {
 		return twistededwards.PointAffine{}, fmt.Errorf("invalid Decaf377 point")
 	}
 	return p, nil
-}
-func decafEncode(p *twistededwards.PointAffine) ([32]byte, error) {
-	if p.X.IsZero() {
-		return [32]byte{}, nil
-	}
-	var t, u1, u2, u3, v, tmp, amd decafq.Element
-	t.Mul(&p.X, &p.Y)
-	u1.Add(&p.X, &t)
-	tmp.Sub(&p.X, &t)
-	u1.Mul(&u1, &tmp)
-	amd.SetInt64(-3022)
-	tmp.Square(&p.X)
-	tmp.Mul(&tmp, &amd)
-	tmp.Mul(&tmp, &u1)
-	if tmp.IsZero() {
-		return [32]byte{}, fmt.Errorf("degenerate Decaf377 point")
-	}
-	tmp.Inverse(&tmp)
-	if v.Sqrt(&tmp) == nil {
-		return [32]byte{}, fmt.Errorf("invalid Decaf377 point square root")
-	}
-	u2.Mul(&v, &u1)
-	u2 = decafAbs(u2)
-	u3.Sub(&u2, &t)
-	tmp.Mul(&amd, &v)
-	tmp.Mul(&tmp, &u3)
-	tmp.Mul(&tmp, &p.X)
-	tmp = decafAbs(tmp)
-	return decafEncodeField(tmp), nil
-}
-func decafMultiply(p *twistededwards.PointAffine, scalar *big.Int) twistededwards.PointAffine {
-	var out twistededwards.PointAffine
-	out.ScalarMultiplication(p, scalar)
-	return out
 }

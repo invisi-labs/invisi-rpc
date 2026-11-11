@@ -19,9 +19,3 @@ func LimitConcurrentRequests(next http.Handler, maxConcurrent int) http.Handler 
 		}
 	})
 }
-
-type capacityError struct{}
-
-func (capacityError) Error() string          { return "detection capacity reached; retry later" }
-func (capacityError) ErrorCode() int         { return -32005 }
-func (capacityError) ErrorData() interface{} { return map[string]int{"retryAfterSeconds": 1} }

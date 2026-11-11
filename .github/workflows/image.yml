@@ -90,7 +90,7 @@ jobs:
           tags: ${{ env.IMAGE }}:${{ steps.version.outputs.value }}
           labels: |
             org.opencontainers.image.title=Invisi Protocol RPC
-            org.opencontainers.image.description=Public Invisi data, membership paths and delegated detection
+            org.opencontainers.image.description=Public Invisi data, membership paths
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ steps.source.outputs.commit }}
             org.opencontainers.image.version=${{ steps.version.outputs.value }}

@@ -9,7 +9,6 @@
       },
       "confirmations": 0,
       "pollSeconds": 3,
-      "detectionBits": 8,
       "snapshotInterval": "6h",
       "deployment": {
         "chainId": "31337",
@@ -23,8 +22,7 @@
           "runtimeCodeHash": "0x6d63da068917ed9bac732e201905282164661fab48d95da620e3929a6c330481",
           "fromBlock": 29
         }
-      },
-      "detectionEnabled": true
+      }
     }
   ],
   "maxConcurrentRequests": 64
