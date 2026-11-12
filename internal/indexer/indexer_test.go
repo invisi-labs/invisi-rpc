@@ -124,20 +124,16 @@ func TestVerifyDeploymentPins(t *testing.T) {
 		})
 	}
 }
-func TestConfirmationBoundary(t *testing.T) {
-	for _, confirm := range []uint64{0, 3, 4, 6} {
-		t.Run(fmt.Sprint(confirm), func(t *testing.T) {
-			i, _, s, d := fixture()
-			i.Confirmations = confirm
-			changed, err := i.Step(context.Background())
-			want := confirm <= 3
-			if err != nil || changed != want {
-				t.Fatalf("step %v %v", changed, err)
-			}
-			if len(s.applied) != boolInt(want) || d.calls != boolInt(want) {
-				t.Fatal("unconfirmed block published")
-			}
-		})
+func TestIndexesLatestWithoutDepthDelay(t *testing.T) {
+	i, c, s, _ := fixture()
+	c.head = 2
+	changed, err := i.Step(context.Background())
+	if err != nil || !changed || len(s.applied) != 1 || s.applied[0].Block.Number != 2 {
+		t.Fatalf("latest step %v %v", changed, err)
+	}
+	changed, err = i.Step(context.Background())
+	if err != nil || changed {
+		t.Fatalf("caught up %v %v", changed, err)
 	}
 }
 func boolInt(v bool) int {
@@ -194,12 +190,12 @@ func TestReorgRollsBackToCanonicalAncestor(t *testing.T) {
 		t.Fatalf("reorg step: %v %v %+v", changed, err, s)
 	}
 }
-func TestReorgReconcilesWithoutConfirmedNewBlock(t *testing.T) {
+func TestReorgReconcilesWhenHeadRegresses(t *testing.T) {
 	i, c, s, _ := fixture()
 	s.blocks[2] = block(c.headers[2])
 	s.blocks[3] = block(c.headers[3])
 	c.headers[3] = &types.Header{Number: big.NewInt(3), ParentHash: c.headers[2].Hash(), Extra: []byte("fork")}
-	i.Confirmations = 3
+	c.head = 2
 	changed, err := i.Step(context.Background())
 	if err != nil || changed || len(s.rollbacks) != 1 || s.rollbacks[0] != 2 || len(s.applied) != 0 {
 		t.Fatalf("unconfirmed reconciliation %v %v", changed, err)

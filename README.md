@@ -84,7 +84,7 @@ invisi-protocol-rpc/
 
 `init` refuses to overwrite an existing configuration. `run` resumes each checkpoint, reconciles reorganizations, and waits normally when caught up. A missing required block, log range or historical state produces a chain-specific error identifying the height; an upstream behind its saved checkpoint is rejected at startup. All chains already configured at startup must pass validation before the listener opens. Chains added while running are validated independently; an unavailable new upstream does not stop existing chains.
 
-Settings live in `config.json`; see [config.example.json](config.example.json). Each entry under `chains` contains its own `chainRpc`, deployment, database and indexing settings. `chain add --confirmations` and `--snapshot-interval` set values for that chain; edit individual entries for other policies. Chain settings are reloaded while running; changing `listen` or `maxConcurrentRequests` requires a restart. `confirmations: 0` is for local development. Choose appropriate deployed-chain depths; confirmation depth is not a consensus finality guarantee. `snapshotInterval` defaults to `6h`; use `0s` to disable exports. `listen` defaults to `127.0.0.1:8080`.
+Settings live in `config.json`; see [config.example.json](config.example.json). Each entry under `chains` contains its own `chainRpc`, deployment, database and indexing settings. `chain add --snapshot-interval` sets the snapshot policy for that chain; edit individual entries for other policies. Chain settings are reloaded while running; changing `listen` or `maxConcurrentRequests` requires a restart. Indexing follows canonical `latest` immediately and reconciles reorgs. The old `confirmations` config field and CLI flag have been removed; remove this field from existing config files before upgrading. `snapshotInterval` defaults to `6h`; use `0s` to disable exports. `listen` defaults to `127.0.0.1:8080`.
 
 ## Environment variables
 
@@ -108,7 +108,6 @@ export INVISI_RPC_LISTEN=127.0.0.1:8080
 | `INVISI_RPC_DATABASE` | `chain add --database`; default `sqlite` |
 | `INVISI_RPC_DATABASE_URL`, `DATABASE_URL` | `chain add --database-url`; PostgreSQL URL |
 | `INVISI_RPC_LISTEN` | `init/run --listen` |
-| `INVISI_RPC_CONFIRMATIONS` | `chain add --confirmations` |
 | `INVISI_RPC_SNAPSHOT_INTERVAL` | `chain add --snapshot-interval` |
 | `INVISI_RPC_SNAPSHOT` | `chain add --snapshot`; local snapshot file |
 | `INVISI_RPC_SNAPSHOT_SHA256` | `chain add --snapshot-sha256`; expected hash |
@@ -228,7 +227,7 @@ Clients should use bounded exponential backoff with jitter, respecting retry gui
 | --- | --- |
 | `cmd/main.go` | Process entry point |
 | `internal/app`, `internal/config` | CLI, initialization, lifecycle and settings |
-| `internal/indexer` | Chain verification, confirmed blocks and reorgs |
+| `internal/indexer` | Chain verification, latest canonical blocks, native finality and reorgs |
 | `internal/protocol` | Pinned ABI and event normalization |
 | `internal/cryptography`, `internal/merkle` | Poseidon2, public Decaf377 key validation and membership paths |
 | `internal/storage`, `internal/snapshot` | SQLite/PostgreSQL and portable bootstrap |
@@ -271,7 +270,7 @@ Encrypted output memos are opaque to this service. Present ciphertexts are opaqu
 
 ### Credit recovery block context
 
-Every indexed event and output candidate includes `block` with `number`, `hash`, `parentHash`, and `timestamp` (uint64 Unix seconds). The timestamp comes from the confirmed canonical header whose hash is used to fetch logs during indexing. Credit draw recovery must use the transition block timestamp to derive UTC+0 Gregorian day/month usage; never use local wall-clock time or caller-supplied dates. Draw transaction parameters contain no date fields. The private per-grant limits and counters remain encrypted; this service does not decrypt them. Credit draw capacities are 1 through 5 and 10 through 80 in steps of 10; proof/circuit dimensions belong to the current Protocol manifest, not this indexer.
+Every indexed event and output candidate includes `block` with `number`, `hash`, `parentHash`, and `timestamp` (uint64 Unix seconds). The timestamp comes from the canonical header whose hash is used to fetch logs during indexing. Credit draw recovery must use the transition block timestamp to derive UTC+0 Gregorian day/month usage; never use local wall-clock time or caller-supplied dates. Draw transaction parameters contain no date fields. The private per-grant limits and counters remain encrypted; this service does not decrypt them. Credit draw capacities are 1 through 5 and 10 through 80 in steps of 10; proof/circuit dimensions belong to the current Protocol manifest, not this indexer.
 
 Index format 3 and snapshot format 2 persist this block context in SQLite and PostgreSQL. Block records require an explicit uint64 timestamp, including zero for the Unix epoch; malformed records and unsupported formats are rejected. Snapshots use the postpaid typed Credit source profile. Contract version remains 1; API version is v1.
 
@@ -342,3 +341,10 @@ Each public operation includes decimal-string `chainId/blockNumber/timestamp/ope
 Direct calldata is decoded with an exact generated-ABI round trip. Aggregate members retain their native capacity and original ordering. A transact digest is Keccak256 of `abi.encode(string("Invisi.Provenance.Operation.v1"),uint64(chainId),address(protocol),uint8(2),uint32(C),bytes32[] publicInputs)`, with the actual ordered `17+3*C` words including wallet authorization. The codec, source-authenticated ABI generator and independent ethers vectors live in the `settlement` package of the shared `github.com/invisi-lab/invisi-sdk-go/protocol` module (v1.2.2). RPC retains canonical chain receipt/log authentication, indexing, and pagination. BatchRequest native capacity and statement hash, typed output insertions, fee accrual, and actual ERC20 funding receipts are cross-checked. Same-token/same-payer pooled pulls are allocated by the authenticated ordered member requests, never by `tx.from`.
 
 A transaction lookup returns `not_found`, `pending_index`, `failed`, or `indexed`, with receipt success separate from indexing availability. Read-only full block discovery includes direct reverted Protocol transactions. Indirect successful calls with Protocol logs and indirect failed hash lookups report `indirect_call_attribution_requires_traces`; their statement, payer and outputs are not guessed. Reverted indirect calls cannot be discovered as a complete list without traces. Unsupported selectors or unauthenticated funding receipts carry an explicit `unsupportedReason`; a consumer must not recognize such operations. This is a bounded replay capability, not a claim of complete trace-backed historical discovery.
+
+
+`invisi_getStatus` includes `finality.latest`, `finality.safe`, and `finality.finalized`. Each contains `status` (`available`, `unsupported`, `unavailable`, or `inconsistent`) and `block` (the existing block shape, or `null`). These are native `eth_getBlockByNumber` heads from the configured Chain RPC, independent of `indexedHead`; no block-depth fallback is used. `unsupported` means an explicit unsupported-method/invalid-tag RPC response, while transport failures and null results are `unavailable`. Headers are hash-checked against canonical numeric reads and ordered finalized ≤ safe ≤ latest. Incoherent samples are retried once. Missing safe/finalized capability does not stop latest indexing or query service.
+
+Accepted finalized anchors are stored durably per deployment in SQLite/PostgreSQL and survive index rollback and service restart. A changed canonical hash at that anchor pauses indexing and reports finalized as inconsistent; investigate the upstream before recovery. An upstream whose latest/finalized height regresses below the accepted anchor is unavailable and pauses indexing until it catches up, without creating a permanent conflict fence. Transient inability to verify an existing anchor also pauses indexing without changing the anchor. Stalled native finality remains available at its unchanged height; applications compare their transaction block against that height. Snapshot exports contain indexed data, not the operator's accepted-finality anchor; restoring a snapshot initializes native finality against the configured upstream.
+
+The additive finality-state table is initialized automatically; standalone reversible SQL is in `deploy/migrations/001-native-finality.{up,down}.sql` for either backend. A finalized-history conflict creates a sticky persisted fence: correcting the provider or restarting does not clear it. The read-only service remains available with finalized `inconsistent`; indexing stays paused. Operator recovery requires stopping the service, investigating the conflicting upstream/index histories, backing up the database, and explicitly clearing `conflicted` only after validating the accepted anchor and indexed history. Never drop or reset the anchor merely to make a conflicting provider pass validation.

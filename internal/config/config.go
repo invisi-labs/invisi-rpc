@@ -27,7 +27,6 @@ type Chain struct {
 	ChainRPC         string           `json:"chainRpc"`
 	Database         Database         `json:"database"`
 	Deployment       model.Deployment `json:"deployment"`
-	Confirmations    uint64           `json:"confirmations"`
 	PollSeconds      int              `json:"pollSeconds"`
 	SnapshotInterval string           `json:"snapshotInterval"`
 }

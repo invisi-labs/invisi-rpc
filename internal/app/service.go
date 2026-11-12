@@ -17,6 +17,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/config"
+	"github.com/invisi-lab/invisi-protocol-rpc/internal/finality"
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/indexer"
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/protocol"
@@ -125,10 +126,16 @@ func prepareChain(ctx context.Context, c config.Chain, reconcile bool) (runtime 
 	if err != nil {
 		return nil, err
 	}
-	ix := &indexer.Indexer{Chain: client, Store: store, Decoder: decoder, Deployment: c.Deployment, Confirmations: c.Confirmations}
+	finalityReader := &finality.Reader{RPC: client.Client(), Store: store}
+	ix := &indexer.Indexer{Chain: client, Store: store, Decoder: decoder, Deployment: c.Deployment, Finality: finalityReader}
 	checkCtx, done := context.WithTimeout(ctx, 30*time.Second)
 	err = ix.Verify(checkCtx)
-	if err == nil {
+	finalityErr := finalityReader.Check(checkCtx)
+	blockedByFinality := finalityErr != nil
+	if blockedByFinality {
+		slog.Error("native finality verification failed; indexing paused", "chainId", c.Deployment.ChainID, "error", finalityErr)
+	}
+	if err == nil && !blockedByFinality {
 		err = CheckAvailability(checkCtx, client, store, c)
 	}
 	var contractVersion string
@@ -143,12 +150,17 @@ func prepareChain(ctx context.Context, c config.Chain, reconcile bool) (runtime 
 		return nil, err
 	}
 	store.SetRootValidator(indexer.RootValidator(client, c.Deployment.Protocol))
-	// Reconcile and validate saved state before any route can expose it.
+	// A finality fence preserves the saved read-only index instead of rewriting disputed history.
+	// Otherwise reconcile and validate saved state before exposing a route.
 	startupCtx, startupDone := context.WithTimeout(ctx, 30*time.Second)
-	if reconcile {
+	if reconcile && !blockedByFinality {
 		_, err = ix.Step(startupCtx)
+		if errors.Is(err, finality.ErrFinalityConflict) {
+			blockedByFinality = true
+			err = nil
+		}
 	}
-	if err == nil {
+	if err == nil && !blockedByFinality {
 		err = VerifySavedState(startupCtx, client, store, c)
 	}
 	startupDone()
@@ -160,6 +172,7 @@ func prepareChain(ctx context.Context, c config.Chain, reconcile bool) (runtime 
 		return nil, err
 	}
 	api.Transactions = client
+	api.Finality = finalityReader
 	handler, err := apirpc.HTTPHandler(api)
 	if err != nil {
 		return nil, err
@@ -225,7 +238,7 @@ func (r *chainRuntime) runIndex(ctx context.Context) {
 		}
 		if err == nil && !waiting {
 			head, _ := r.store.Checkpoint(ctx)
-			slog.Info("caught up; waiting for confirmed blocks", "chainId", r.config.Deployment.ChainID, "checkpoint", head)
+			slog.Info("caught up; waiting for latest blocks", "chainId", r.config.Deployment.ChainID, "checkpoint", head)
 			waiting = true
 		}
 		select {

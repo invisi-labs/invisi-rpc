@@ -143,6 +143,7 @@ func OpenSQLite(ctx context.Context, path string, d model.Deployment) (*SQLiteSt
 }
 
 const sqliteSchema = `
+CREATE TABLE IF NOT EXISTS invisi_finalized_anchors (deployment text PRIMARY KEY, block text NOT NULL, conflicted integer NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS invisi_registrations (
  deployment text NOT NULL, owner BLOB NOT NULL, block_number bigint NOT NULL, log_index bigint NOT NULL, registration TEXT NOT NULL,
  PRIMARY KEY(deployment,owner,block_number,log_index), FOREIGN KEY(deployment,block_number) REFERENCES invisi_blocks ON DELETE CASCADE

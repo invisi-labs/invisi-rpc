@@ -50,7 +50,6 @@ func chainCommand(output io.Writer) *cli.Command {
 			&cli.StringFlag{Name: "snapshot", Sources: cli.EnvVars("INVISI_RPC_SNAPSHOT")},
 			&cli.StringFlag{Name: "snapshot-sha256", Sources: cli.EnvVars("INVISI_RPC_SNAPSHOT_SHA256")},
 			&cli.Int64Flag{Name: "snapshot-max-bytes", Value: snapshot.DefaultMaxDecompressedBytes, Sources: cli.EnvVars("INVISI_RPC_SNAPSHOT_MAX_BYTES")},
-			&cli.Uint64Flag{Name: "confirmations", Sources: cli.EnvVars("INVISI_RPC_CONFIRMATIONS")},
 			&cli.StringFlag{Name: "snapshot-interval", Value: "6h", Sources: cli.EnvVars("INVISI_RPC_SNAPSHOT_INTERVAL")},
 		}, Action: func(ctx context.Context, c *cli.Command) error { return addChain(ctx, c, output) }},
 		{Name: "remove", ArgsUsage: "ID", Flags: []cli.Flag{dataDirFlag()}, Action: func(ctx context.Context, c *cli.Command) error { return mutateChain(ctx, c, output, false) }},
@@ -139,7 +138,7 @@ func addChain(ctx context.Context, c *cli.Command, output io.Writer) error {
 	if err != nil {
 		return err
 	}
-	chain := config.Chain{ChainRPC: c.String("rpc"), Deployment: dep, Confirmations: c.Uint64("confirmations"), SnapshotInterval: c.String("snapshot-interval"), Database: config.Database{Driver: driver}}
+	chain := config.Chain{ChainRPC: c.String("rpc"), Deployment: dep, SnapshotInterval: c.String("snapshot-interval"), Database: config.Database{Driver: driver}}
 	if driver == "sqlite" {
 		chain.Database.Path = filepath.Join("chains", id, "protocol.sqlite")
 	} else {

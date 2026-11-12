@@ -10,6 +10,10 @@ import (
 // Backend is the persistence contract shared by PostgreSQL and SQLite.
 // Configure its root validator before starting readers, writers, or imports.
 type Backend interface {
+	FinalizedAnchor(context.Context) (*model.Block, error)
+	SaveFinalizedAnchor(context.Context, model.Block) error
+	FinalityConflict(context.Context) (bool, error)
+	MarkFinalityConflict(context.Context) error
 	Close()
 	SetRootValidator(func(context.Context, model.Root) error)
 	Checkpoint(context.Context) (*model.Block, error)

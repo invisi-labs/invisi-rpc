@@ -12,6 +12,7 @@ import (
 	"github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	"github.com/ethereum/go-ethereum/common"
 	gethrpc "github.com/ethereum/go-ethereum/rpc"
+	"github.com/invisi-lab/invisi-protocol-rpc/internal/finality"
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/protocol"
 )
@@ -29,7 +30,11 @@ type Backend interface {
 	Broadcasters(context.Context, model.BroadcasterQuery) (*model.BroadcasterPage, error)
 	ReceivingAddress(context.Context, common.Address) (*model.RegisteredReceivingAddress, error)
 }
+type FinalityReader interface {
+	Read(context.Context) finality.Snapshot
+}
 type API struct {
+	Finality     FinalityReader
 	Transactions TransactionReader
 	Store        Backend
 	Deployment   model.Deployment
@@ -46,6 +51,7 @@ type VersionInfo struct {
 }
 
 type Status struct {
+	Finality finality.Snapshot `json:"finality"`
 	VersionInfo
 	Deployment  model.Deployment `json:"deployment"`
 	IndexedHead *model.Block     `json:"indexedHead"`
@@ -62,7 +68,11 @@ func New(store Backend, d model.Deployment, protocolVersion string) (*API, error
 }
 func (a *API) GetStatus(ctx context.Context) (Status, error) {
 	h, e := a.Store.Checkpoint(ctx)
-	return Status{VersionInfo: a.version, Deployment: a.Deployment, IndexedHead: h}, e
+	f := finality.Unavailable()
+	if a.Finality != nil {
+		f = a.Finality.Read(ctx)
+	}
+	return Status{VersionInfo: a.version, Deployment: a.Deployment, IndexedHead: h, Finality: f}, e
 }
 
 // GetDeployment is available before indexing has reached its first checkpoint.

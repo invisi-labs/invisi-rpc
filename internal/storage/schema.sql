@@ -55,3 +55,5 @@ CREATE TABLE IF NOT EXISTS invisi_credit_grants (
  PRIMARY KEY(deployment,block_number,log_index), FOREIGN KEY(deployment,block_number) REFERENCES invisi_blocks ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS invisi_credit_grant_lookup ON invisi_credit_grants(deployment,owner,token,kind,block_number,log_index);
+
+CREATE TABLE IF NOT EXISTS invisi_finalized_anchors (deployment text PRIMARY KEY, block text NOT NULL, conflicted integer NOT NULL DEFAULT 0);

@@ -48,7 +48,6 @@ func TestCommandEnvironmentChainSettings(t *testing.T) {
 	t.Setenv("INVISI_RPC_DATA_DIR", dir)
 	t.Setenv("INVISI_RPC_DEPLOYMENT_FILE", privateCatalog(t, privateDeployments()))
 	t.Setenv("INVISI_RPC_LISTEN", "127.0.0.1:9090")
-	t.Setenv("INVISI_RPC_CONFIRMATIONS", "12")
 	t.Setenv("INVISI_RPC_SNAPSHOT_INTERVAL", "2h")
 	t.Setenv("INVISI_RPC_DATABASE", "sqlite")
 	t.Setenv("CHAIN_RPC_URL", "https://localhost:8545?methods=a,b&api=key=value")
@@ -59,7 +58,7 @@ func TestCommandEnvironmentChainSettings(t *testing.T) {
 		t.Fatal(e)
 	}
 	chain := cfg.Chains[0]
-	if cfg.Listen != "127.0.0.1:9090" || chain.ChainRPC != "https://localhost:8545?methods=a,b&api=key=value" || chain.Confirmations != 12 || chain.SnapshotInterval != "2h" {
+	if cfg.Listen != "127.0.0.1:9090" || chain.ChainRPC != "https://localhost:8545?methods=a,b&api=key=value" || chain.SnapshotInterval != "2h" {
 		t.Fatal(cfg)
 	}
 	t.Setenv("CHAIN_RPC_URL", "wss://localhost:8546/token")
@@ -79,7 +78,6 @@ func TestCommandFlagsOverrideEnvironment(t *testing.T) {
 			t.Setenv("INVISI_RPC_LISTEN", "127.0.0.1:9090")
 			t.Setenv("INVISI_RPC_DEPLOYMENT_FILE", privateCatalog(t, privateDeployments()))
 			t.Setenv("CHAIN_RPC_URL", "http://env:8545")
-			t.Setenv("INVISI_RPC_CONFIRMATIONS", "12")
 			args := []string{"invisi-protocol-rpc", "init", "--listen", "127.0.0.1:8088"}
 			if positional {
 				args = append(args, dir)
@@ -87,9 +85,9 @@ func TestCommandFlagsOverrideEnvironment(t *testing.T) {
 				args = append(args, "--dir", dir)
 			}
 			runCommand(t, args...)
-			runCommand(t, "invisi-protocol-rpc", "chain", "add", "31337", "--dir", dir, "--rpc", "http://explicit:8545", "--confirmations", "3")
+			runCommand(t, "invisi-protocol-rpc", "chain", "add", "31337", "--dir", dir, "--rpc", "http://explicit:8545")
 			cfg, e := config.LoadDir(dir)
-			if e != nil || cfg.Listen != "127.0.0.1:8088" || cfg.Chains[0].ChainRPC != "http://explicit:8545" || cfg.Chains[0].Confirmations != 3 {
+			if e != nil || cfg.Listen != "127.0.0.1:8088" || cfg.Chains[0].ChainRPC != "http://explicit:8545" {
 				t.Fatal(cfg, e)
 			}
 			if _, e = os.Stat(unused); !os.IsNotExist(e) {

@@ -208,7 +208,7 @@ func TestCommandInvalidSelectionsBeforeDatabaseChanges(t *testing.T) {
 			}
 		})
 	}
-	for _, flag := range []string{"chain", "deployment-file", "database", "snapshot", "confirmations", "snapshot-interval"} {
+	for _, flag := range []string{"chain", "deployment-file", "database", "snapshot", "snapshot-interval"} {
 		dir := filepath.Join(t.TempDir(), "bad")
 		if Command(io.Discard).Run(context.Background(), []string{"invisi-protocol-rpc", "init", "--dir", dir, "--" + flag, "value"}) == nil {
 			t.Fatal("init accepted", flag)
