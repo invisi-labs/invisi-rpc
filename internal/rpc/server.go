@@ -34,6 +34,7 @@ type FinalityReader interface {
 	Read(context.Context) finality.Snapshot
 }
 type API struct {
+	ChainState   ChainStateReader
 	Finality     FinalityReader
 	Transactions TransactionReader
 	Store        Backend

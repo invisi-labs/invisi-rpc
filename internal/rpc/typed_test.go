@@ -14,7 +14,7 @@ import (
 )
 
 func TestPublicMethodAllowlistAndUnknownMethod(t *testing.T) {
-	want := []string{"GetBlock", "GetBroadcasters", "GetCreditAllocation", "GetCreditRevocationBitmap", "GetCreditState", "GetCreditTransitions", "GetDeployment", "GetEvents", "GetMembership", "GetNote", "GetNoteUpdates", "GetReceivingAddress", "GetSettlementOperations", "GetProtocolTransactions", "GetTransactionOperations", "GetRoots", "GetStatus", "GetTransactionCreditUpdates", "GetTransactionNoteUpdates", "GetVersion", "IsCreditConsumed", "IsNoteSpent"}
+	want := []string{"ReadChainState", "GetBlock", "GetBroadcasters", "GetCreditAllocation", "GetCreditRevocationBitmap", "GetCreditState", "GetCreditTransitions", "GetDeployment", "GetEvents", "GetMembership", "GetNote", "GetNoteUpdates", "GetReceivingAddress", "GetSettlementOperations", "GetProtocolTransactions", "GetTransactionOperations", "GetRoots", "GetStatus", "GetTransactionCreditUpdates", "GetTransactionNoteUpdates", "GetVersion", "IsCreditConsumed", "IsNoteSpent"}
 	sort.Strings(want)
 	typ := reflect.TypeOf((*API)(nil))
 	got := make([]string, typ.NumMethod())

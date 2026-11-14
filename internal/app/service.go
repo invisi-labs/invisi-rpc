@@ -172,6 +172,7 @@ func prepareChain(ctx context.Context, c config.Chain, reconcile bool) (runtime 
 		return nil, err
 	}
 	api.Transactions = client
+	api.ChainState = client
 	api.Finality = finalityReader
 	handler, err := apirpc.HTTPHandler(api)
 	if err != nil {

@@ -176,12 +176,13 @@ POST JSON-RPC 2.0 with positional parameter arrays to `/v1/chains/<chainId>`. `G
 | `invisi_getSettlementOperations` | `[{fromBlock?, toBlock?, limit, cursor?}]` | Canonical public logical operation page |
 | `invisi_getProtocolTransactions` | `[{fromBlock?, toBlock?, limit, cursor?}]` | Same logical-operation page including supported direct failures |
 | `invisi_getTransactionOperations` | `[transactionHash]` | Receipt availability and authenticated logical operations |
-| `invisi_getStatus` | `[]` | Deployment and indexed head |
+| `invisi_getStatus` | `[]` | Deployment, indexed head and native latest/safe/finalized availability |
+| `invisi_readChainState` | `[{kind, block?, address?, from?, data?, gas?, transactionHash?}]` | Deployment-bound, restricted read-only header/code/call/receipt/transaction facts; see Trusted WalletSession read gateway below |
 | `invisi_getBlock` | `[blockNumber]` | Low-level complete indexed block and raw logs |
 | `invisi_getEvents` | `[range]` | Low-level canonical events |
 | `invisi_getRoots` | `[treeId]` | Recent physical NoteTree roots |
 | `invisi_getMembership` | `[treeId, leafIndex, root]` | Physical leaf membership; does not identify a Note or Credit |
-| `invisi_getNote` | `[commitment, atBlock]` | `{output, membership}` for an ordinary Note, or `null` |
+| `invisi_getNote` | `[commitment, atBlock]` or `[commitment, {"finality":"safe"}]` / `[commitment, {"finality":"finalized"}]` | Legacy: `{output, membership}` or `null`; finality selector: versioned, deployment-bound `confirmed`/`pending` evidence with `confirmation` (see Trusted Note confirmation below) |
 | `invisi_getNoteUpdates` | `[range]` | `{blockHash, notes}`; ordinary Notes only |
 | `invisi_getTransactionNoteUpdates` | `[transactionHash]` | Availability metadata and `notes` |
 | `invisi_isNoteSpent` | `[nullifier, atBlock]` | Ordinary Note consumption through the indexed block |
@@ -360,3 +361,11 @@ Pending results have null output, membership and confirmation. Reasons are `not_
 This mode explicitly trusts the selected Protocol RPC for canonicality and finality. It lets server applications avoid direct Chain RPC access; it is not independent light-client verification or a spending-authority proof. It accepts no nonce, opening or merchant order. Consumers still compare the commitment with their private receiving materials and enforce local one-time redemption. Existing SDK independent chain-authentication paths remain available.
 
 The cross-language wire fixture is `internal/rpc/testdata/note-confirmation.json`; regenerate intentionally with `UPDATE_NOTE_FIXTURE=1 go test ./internal/rpc -run TestNoteConfirmationWireFixture`.
+
+### Trusted WalletSession read gateway
+
+`invisi_readChainState` on `/v1/chains/{chainId}` provides read-only chain facts for clients that intentionally trust this Protocol RPC instead of connecting to an Ethereum node. It accepts one object with `kind` (`header`, `code`, `call`, `receipt`, or `transaction`), optional `block` (`latest`, `safe`, `finalized`, or a hex block number), and the corresponding `address`, `from`, `data`, `gas`, or `transactionHash`. Responses include protocol/API versions and the complete deployment profile; header hashes and receipt block bindings are checked by the SDK trusted providers.
+
+Contract calls are restricted to allowed selectors and canonical argument encodings for pinned protocol/registry contracts, broadcaster lookup and token metadata/balance/allowance reads. Calldata, gas and response sizes are bounded. Transaction simulation uses read-only `eth_call` inside this service; there is no send/sign/write operation or arbitrary RPC forwarding. The public client still calls only `invisi_*`. This endpoint does not independently authenticate the node: clients trust the selected Protocol RPC for canonical chain state and finality, and pin its deployment.
+
+The SDK trusted providers (Go `rpc.NewTrustedProvider`, TypeScript `TrustedProvider` from `@invisi-labs/rpc/trusted-provider`, Rust `rpc::TrustedProvider`) adapt these facts to each language’s chain-reader interface for WalletSession preparation and operation recovery. Deploy the updated RPC service before enabling Facilitator collection. Existing `invisi_getNote` finalized confirmation remains the source of receiving-note evidence.
