@@ -213,7 +213,7 @@ func HTTPHandler(a *API) (http.Handler, error) {
 	s := gethrpc.NewServer()
 	s.SetBatchLimits(20, 16<<20)
 	s.SetHTTPBodyLimit(1 << 20)
-	if e := s.RegisterName("invisi", a); e != nil {
+	if e := s.RegisterName("invisi", &noteAPI{a}); e != nil {
 		return nil, e
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
