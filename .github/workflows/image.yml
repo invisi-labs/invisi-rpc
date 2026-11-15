@@ -112,10 +112,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          DIGEST: ${{ steps.image.outputs.digest }}
+          SOURCE_COMMIT: ${{ steps.source.outputs.commit }}
         run: |
+          python3 source/scripts/release-notes.py "$RELEASE_TAG" > release-notes.md
+          printf '\n## Artifacts\n\nImage: %s:%s\n\nDigest: %s\n\nSource: %s\n\nPlatforms: linux/amd64, linux/arm64.\n' "$IMAGE" "${RELEASE_TAG#v}" "$DIGEST" "$SOURCE_COMMIT" >> release-notes.md
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --verify-tag --title "$RELEASE_TAG" --generate-notes --draft
+            gh release create "$RELEASE_TAG" --verify-tag --title "$RELEASE_TAG" --notes-file release-notes.md --draft
           fi
           gh release upload "$RELEASE_TAG" release-assets/* --clobber
-          gh release edit "$RELEASE_TAG" --draft=false
+          gh release edit "$RELEASE_TAG" --notes-file release-notes.md --draft=false
           echo "Uploaded six platform archives and SHA-256 checksums to the GitHub Release." >> "$GITHUB_STEP_SUMMARY"
