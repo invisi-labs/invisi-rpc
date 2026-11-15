@@ -92,7 +92,7 @@ func (router *liveRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		router.mu.Unlock()
 		if r.Method != http.MethodGet {
 			w.Header().Set("Allow", http.MethodGet)
-			http.Error(w, "GET required", http.StatusMethodNotAllowed)
+			apirpc.WriteHTTPError(w, http.StatusMethodNotAllowed, "GET required")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -104,7 +104,7 @@ func (router *liveRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c := router.chains[id]
 	if c == nil || path != protocol.APIPrefix+"/chains/"+id {
 		router.mu.Unlock()
-		http.NotFound(w, r)
+		apirpc.WriteHTTPError(w, http.StatusNotFound, "route not found")
 		return
 	}
 	c.requests.Add(1)

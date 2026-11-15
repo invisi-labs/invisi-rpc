@@ -1,6 +1,6 @@
 # Invisi Protocol RPC command reference
 
-This reference describes the executable CLI. JSON-RPC methods such as `invisi_getNote` are HTTP API methods, not shell subcommands; see the [README API documentation](README.md#json-rpc).
+This reference describes the executable CLI. JSON-RPC methods such as `invisi_getNote` are HTTP API methods, not shell subcommands; see the [API reference](api.md).
 
 ## Build and command tree
 
@@ -113,6 +113,10 @@ Deployment commands generate the records after checking successful receipts and 
 
 The file structure is `{ "version": 1, "chains": { "42161": { "name": "Private Arbitrum", "protocol": { "address": "0x…", "runtimeCodeHash": "0x…", "fromBlock": 123456 } } } }`. Use real deployment values; zero addresses and hashes are rejected. `runtimeCodeHash` is Keccak-256 of deployed runtime bytecode, including library addresses and immutables. `fromBlock` is the Protocol creation block.
 
+Optional `registry` and `broadcasterRegistry` entries use the same `{address,runtimeCodeHash,fromBlock}` contract shape as `protocol`. Set them in the deployment catalog before `chain add`; they are copied into the initialized configuration. For a stopped existing installation, review and set the deployment metadata explicitly rather than expecting later catalog edits to retarget it. All configured event source addresses must be distinct. No registry address is built into the service. The contiguous event stream begins at the earliest configured deployment block, and registration updates commit and roll back with their blocks. Changing/adding registry pins to a populated index requires a reviewed fresh database; configuration changes must never silently omit earlier registrations.
+
+Index format 3 and snapshot format 2 retain explicit canonical block timestamps, typed Note/Credit projections and registry histories. The current `invisi-protocol-v1-postpaid-credit-typed` snapshot source profile pins the Protocol, receiving Registry and Broadcaster Registry ABIs and all configured deployments. Incompatible experimental databases and older snapshot source profiles must be rebuilt/exported with the current indexer; the service never deletes or resets them automatically. Historical normalized records restored from a snapshot inherit publisher trust. Startup checks the saved checkpoint timestamp against its canonical header before serving.
+
 `chain add` resolves selected records into `config.json`. Subsequent catalog changes do not silently retarget an initialized node. `run` verifies every RPC's chain ID and runtime hash before serving. The database also rejects mismatched persisted deployment information.
 
 After chains have been added and snapshots exported, the directory contains:
@@ -217,7 +221,7 @@ Snapshots replay stored normalized batches and are not a trustless proof of comp
 
 ## Upgrades, failures and exit status
 
-There is no automatic migration, deletion or reset of service directories. Reuse an existing installation explicitly with `--dir /existing/path` and back it up before upgrades. The old `confirmations` configuration field and CLI flag were removed; remove that field before upgrading. Incompatible database/snapshot source profiles require a reviewed rebuild/export with the current indexer; initialization never replaces existing data. Deployment pins, snapshot profiles and finalized-history fences remain security boundaries. Follow the [README native-finality recovery guidance](README.md#canonical-settlement-facts) for a sticky finalized-history conflict rather than resetting its anchor.
+There is no automatic migration, deletion or reset of service directories. Reuse an existing installation explicitly with `--dir /existing/path` and back it up before upgrades. The old `confirmations` configuration field and CLI flag were removed; remove that field before upgrading. Incompatible database/snapshot source profiles require a reviewed rebuild/export with the current indexer; initialization never replaces existing data. Deployment pins, snapshot profiles and finalized-history fences remain security boundaries. Follow the [API native-finality recovery guidance](api.md#canonical-settlement-facts) for a sticky finalized-history conflict rather than resetting its anchor.
 
 The executable returns status 0 for successful commands/help or graceful shutdown and nonzero (normally 1) for parsing, validation, configuration, database, snapshot or upstream errors. Errors are printed to stderr. Failed imports roll back their database transaction; files prepared before a later operational failure may remain for safe retry. There is no automatic rollback of already completed database preparation on subsequent configuration publication failure. No RPC network is needed for `chain add` itself, but it requires an initialized directory and a valid deployment catalog; `run` performs upstream authentication.
 

@@ -2,10 +2,13 @@
 package rpc
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"mime"
 	"net/http"
 	"time"
 
@@ -214,14 +217,38 @@ func HTTPHandler(a *API) (http.Handler, error) {
 	s := gethrpc.NewServer()
 	s.SetBatchLimits(20, 16<<20)
 	s.SetHTTPBodyLimit(1 << 20)
-	if e := s.RegisterName("invisi", &noteAPI{a}); e != nil {
+	if e := s.RegisterName("invisi", &publicAPI{api: &noteAPI{a}}); e != nil {
 		return nil, e
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
-			http.Error(w, "POST required", http.StatusMethodNotAllowed)
+			w.Header().Set("Allow", http.MethodPost)
+			WriteHTTPError(w, http.StatusMethodNotAllowed, "POST required")
 			return
 		}
+		media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		if err != nil || (media != "application/json" && media != "application/json-rpc" && media != "application/jsonrequest") {
+			WriteHTTPError(w, http.StatusUnsupportedMediaType, "JSON content type required")
+			return
+		}
+		// Read the entire bounded body before dispatch: an oversized streaming body
+		// must not execute a valid JSON prefix or any batch members.
+		const bodyLimit = 1 << 20
+		if r.ContentLength > bodyLimit {
+			WriteHTTPError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return
+		}
+		body, err := io.ReadAll(io.LimitReader(r.Body, bodyLimit+1))
+		if len(body) > bodyLimit {
+			WriteHTTPError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return
+		}
+		if err != nil {
+			WriteHTTPError(w, http.StatusBadRequest, "request body could not be read")
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		r.ContentLength = int64(len(body))
 		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 		defer cancel()
 		s.ServeHTTP(w, r.WithContext(ctx))

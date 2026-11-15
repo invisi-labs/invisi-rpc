@@ -202,7 +202,7 @@ func chainRouter(runtimes []*chainRuntime) http.Handler {
 		if r.URL.Path == protocol.APIPrefix || r.URL.Path == protocol.APIPrefix+"/" {
 			if r.Method != http.MethodGet {
 				w.Header().Set("Allow", http.MethodGet)
-				http.Error(w, "GET required", http.StatusMethodNotAllowed)
+				apirpc.WriteHTTPError(w, http.StatusMethodNotAllowed, "GET required")
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -214,7 +214,7 @@ func chainRouter(runtimes []*chainRuntime) http.Handler {
 			handler.ServeHTTP(w, r)
 			return
 		}
-		http.NotFound(w, r)
+		apirpc.WriteHTTPError(w, http.StatusNotFound, "route not found")
 	})
 }
 

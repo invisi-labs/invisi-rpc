@@ -161,7 +161,7 @@ func TestHTTPStrictRangeAnchors(t *testing.T) {
 	f, _ = anchor()
 	f.reorgAfter = 1
 	r = call(t, testServer(t, f), "invisi_getEvents", []any{good}, "")
-	if r.Error == nil || !strings.Contains(r.Error.Message, "reorganized") {
+	if r.Error == nil || r.Error.Code != -32000 || r.Error.Message != "Request rejected" || f.blockReads != 2 {
 		t.Fatalf("did not reject reorg during query: %+v", r)
 	}
 }
@@ -287,7 +287,7 @@ func TestHTTPRangeBoundaryAndAnchorReads(t *testing.T) {
 			f, rng := anchor()
 			f.reorgAfter = 1
 			r := call(t, testServer(t, f), method, []any{rng}, "")
-			if r.Error == nil || !strings.Contains(r.Error.Message, "reorganized") {
+			if r.Error == nil || r.Error.Code != -32000 || r.Error.Message != "Request rejected" || f.blockReads != 2 {
 				t.Fatalf("accepted reorg: %+v", r)
 			}
 		})
@@ -306,8 +306,11 @@ func TestHTTPRangeEventCapsBeforeTransitionFilter(t *testing.T) {
 					f.events = []model.Event{{Name: "Shield", Data: json.RawMessage(`"` + strings.Repeat("x", maxRangeResponseBytes) + `"`)}}
 				}
 				r := call(t, testServer(t, f), method, []any{rng}, "")
-				if r.Error == nil || !strings.Contains(r.Error.Message, "smaller ranges") {
+				if r.Error == nil || r.Error.Code != -32000 || r.Error.Message != "Request rejected" || f.eventReads != 1 {
 					t.Fatalf("accepted oversized event data: %+v", r)
+				}
+				if _, err := (&API{Store: f}).GetEvents(context.Background(), rng); err == nil || !strings.Contains(err.Error(), "smaller ranges") {
+					t.Fatalf("internal range error changed: %v", err)
 				}
 			})
 		}
