@@ -43,7 +43,7 @@ func validateRPC(raw string) error {
 }
 func chainCommand(output io.Writer) *cli.Command {
 	return &cli.Command{Name: "chain", Usage: "Manage configured chains", Commands: []*cli.Command{
-		{Name: "add", ArgsUsage: "ID", Flags: []cli.Flag{dataDirFlag(), rpcFlag(),
+		{Name: "add", ArgsUsage: "ID", Flags: []cli.Flag{rpcFlag(),
 			&cli.StringFlag{Name: "deployment-file", Value: deployment.DefaultFile, Usage: "Protocol deployment JSON file", Sources: cli.EnvVars("INVISI_RPC_DEPLOYMENT_FILE")},
 			&cli.StringFlag{Name: "database", Value: "sqlite", Sources: cli.EnvVars("INVISI_RPC_DATABASE")},
 			&cli.StringFlag{Name: "database-url", Sources: cli.EnvVars("INVISI_RPC_DATABASE_URL", "DATABASE_URL")},
@@ -52,9 +52,9 @@ func chainCommand(output io.Writer) *cli.Command {
 			&cli.Int64Flag{Name: "snapshot-max-bytes", Value: snapshot.DefaultMaxDecompressedBytes, Sources: cli.EnvVars("INVISI_RPC_SNAPSHOT_MAX_BYTES")},
 			&cli.StringFlag{Name: "snapshot-interval", Value: "6h", Sources: cli.EnvVars("INVISI_RPC_SNAPSHOT_INTERVAL")},
 		}, Action: func(ctx context.Context, c *cli.Command) error { return addChain(ctx, c, output) }},
-		{Name: "remove", ArgsUsage: "ID", Flags: []cli.Flag{dataDirFlag()}, Action: func(ctx context.Context, c *cli.Command) error { return mutateChain(ctx, c, output, false) }},
-		{Name: "set-rpc", ArgsUsage: "ID", Flags: []cli.Flag{dataDirFlag(), rpcFlag()}, Action: func(ctx context.Context, c *cli.Command) error { return mutateChain(ctx, c, output, true) }},
-		{Name: "list", Flags: []cli.Flag{dataDirFlag()}, Action: func(ctx context.Context, c *cli.Command) error {
+		{Name: "remove", ArgsUsage: "ID", Action: func(ctx context.Context, c *cli.Command) error { return mutateChain(ctx, c, output, false) }},
+		{Name: "set-rpc", ArgsUsage: "ID", Flags: []cli.Flag{rpcFlag()}, Action: func(ctx context.Context, c *cli.Command) error { return mutateChain(ctx, c, output, true) }},
+		{Name: "list", Action: func(ctx context.Context, c *cli.Command) error {
 			if c.Args().Len() != 0 {
 				return errors.New("chain list accepts no arguments")
 			}

@@ -132,21 +132,28 @@ func TestCommandSnapshotExportEnvironment(t *testing.T) {
 }
 
 func TestCommandRunListenOverride(t *testing.T) {
-	for _, explicit := range []bool{false, true} {
-		t.Run(map[bool]string{false: "environment", true: "flag"}[explicit], func(t *testing.T) {
+	for _, mode := range []string{"environment", "flag", "empty-environment"} {
+		t.Run(mode, func(t *testing.T) {
 			dir := t.TempDir()
 			chain := serviceConfig(t)
 			chain.Deployment.FromBlock = 0
 			chain.Deployment.RuntimeCodeHash = crypto.Keccak256Hash([]byte{0x60, 0x00})
 			_, chain.ChainRPC = fixtureChain(t, &chainRPCFixture{latest: 0})
-			if err := config.Save(dir, config.Config{Listen: "invalid-saved-listener", Chains: []config.Chain{chain}}); err != nil {
+			listen := unusedListenAddress(t)
+			savedListen := "invalid-saved-listener"
+			if mode == "empty-environment" {
+				savedListen = listen
+			}
+			if err := config.Save(dir, config.Config{Listen: savedListen, Chains: []config.Chain{chain}}); err != nil {
 				t.Fatal(err)
 			}
 			t.Setenv("INVISI_RPC_DATA_DIR", dir)
-			listen := unusedListenAddress(t)
 			t.Setenv("INVISI_RPC_LISTEN", listen)
 			args := []string{"invisi-protocol-rpc", "run"}
-			if explicit {
+			if mode == "empty-environment" {
+				t.Setenv("INVISI_RPC_LISTEN", "")
+			}
+			if mode == "flag" {
 				t.Setenv("INVISI_RPC_LISTEN", "invalid-env-listener")
 				args = append(args, "--listen", listen)
 			}
@@ -190,7 +197,7 @@ func TestCommandRunListenOverride(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if saved.Listen != "invalid-saved-listener" {
+			if saved.Listen != savedListen {
 				t.Fatal("runtime override modified saved config")
 			}
 		})

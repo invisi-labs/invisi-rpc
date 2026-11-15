@@ -8,9 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/config"
 	"github.com/invisi-lab/invisi-protocol-rpc/internal/snapshot"
@@ -31,25 +34,37 @@ func selectedDataDir(c *cli.Command) string {
 }
 
 func Command(output io.Writer) *cli.Command {
-	return &cli.Command{Name: "invisi-protocol-rpc", Usage: "Index public Invisi protocol data for selected chains", Writer: output, SliceFlagSeparator: "\n", Commands: []*cli.Command{
-		{Name: "init", Usage: "Initialize an empty service directory", ArgsUsage: "[DATA_DIR]", Flags: []cli.Flag{dataDirFlag(), &cli.StringFlag{Name: "listen", Sources: cli.EnvVars("INVISI_RPC_LISTEN"), Value: "127.0.0.1:8080"}}, Action: func(ctx context.Context, c *cli.Command) error { return initialize(ctx, c, output) }},
+	return &cli.Command{Name: "invisi-protocol-rpc", Usage: "Index public Invisi protocol data for selected chains", Writer: output, SliceFlagSeparator: "\n", Flags: []cli.Flag{dataDirFlag()}, Commands: []*cli.Command{
+		{Name: "init", Usage: "Initialize an empty service directory", ArgsUsage: "[DATA_DIR]", Flags: []cli.Flag{&cli.StringFlag{Name: "listen", Sources: listenEnvironment(), Value: "127.0.0.1:8080"}}, Action: func(ctx context.Context, c *cli.Command) error { return initialize(ctx, c, output) }},
 		chainCommand(output),
-		{Name: "run", Usage: "Resume all configured chains on one listener", Flags: []cli.Flag{dataDirFlag(), &cli.StringFlag{Name: "listen", Sources: cli.EnvVars("INVISI_RPC_LISTEN"), Usage: "Override the saved listen address"}}, Action: func(ctx context.Context, c *cli.Command) error {
+		{Name: "run", Usage: "Resume all configured chains on one listener", Flags: []cli.Flag{&cli.StringFlag{Name: "listen", Sources: listenEnvironment(), Usage: "Override the saved listen address"}}, Action: func(ctx context.Context, c *cli.Command) error {
+			if c.Args().Len() != 0 {
+				return errors.New(c.Name + " accepts no arguments")
+			}
 			dir, err := filepath.Abs(selectedDataDir(c))
 			if err != nil {
+				return err
+			}
+			if err := validateSelectedListen(c); err != nil {
 				return err
 			}
 			cfg, err := config.LoadDir(dir)
 			if err != nil {
 				return fmt.Errorf("load initialized directory (run init first): %w", err)
 			}
-			if c.IsSet("listen") {
+			if c.String("listen") != "" {
 				cfg.Listen = c.String("listen")
+			}
+			if err := validateListen(cfg.Listen); err != nil {
+				return err
 			}
 			return Run(ctx, cfg, dir)
 		}},
 		{Name: "snapshot", Usage: "Manage portable per-chain index snapshots", Commands: []*cli.Command{
-			{Name: "export", Usage: "Export an immutable snapshot and latest manifest", Flags: []cli.Flag{dataDirFlag(), &cli.StringFlag{Name: "chain", Sources: cli.EnvVars("INVISI_RPC_CHAIN"), Usage: "Selected chain ID (required for a multi-chain directory)"}, &cli.StringFlag{Name: "output", Sources: cli.EnvVars("INVISI_RPC_SNAPSHOT_OUTPUT"), Usage: "Snapshot base directory (default DATA_DIR/snapshots)"}}, Action: func(ctx context.Context, c *cli.Command) error {
+			{Name: "export", Usage: "Export an immutable snapshot and latest manifest", Flags: []cli.Flag{&cli.StringFlag{Name: "chain", Sources: cli.EnvVars("INVISI_RPC_CHAIN"), Usage: "Selected chain ID (required for a multi-chain directory)"}, &cli.StringFlag{Name: "output", Sources: cli.EnvVars("INVISI_RPC_SNAPSHOT_OUTPUT"), Usage: "Snapshot base directory (default DATA_DIR/snapshots)"}}, Action: func(ctx context.Context, c *cli.Command) error {
+				if c.Args().Len() != 0 {
+					return errors.New(c.Name + " accepts no arguments")
+				}
 				dir, err := filepath.Abs(selectedDataDir(c))
 				if err != nil {
 					return err
@@ -117,6 +132,15 @@ func initialize(ctx context.Context, c *cli.Command, output io.Writer) error {
 	selected := selectedDataDir(c)
 	if c.Args().Len() == 1 {
 		selected = c.Args().First()
+		if selected == "" {
+			selected = DefaultDataDir
+		}
+	}
+	if strings.EqualFold(filepath.Ext(filepath.Clean(selected)), ".json") {
+		return errors.New("init requires a data directory, not a JSON configuration file")
+	}
+	if err := validateSelectedListen(c); err != nil {
+		return err
 	}
 	dir, err := filepath.Abs(selected)
 	if err != nil {
@@ -188,4 +212,45 @@ func snapshotDigest(ctx context.Context, path, expected string) (string, error) 
 		return "", errors.New("snapshot SHA256 mismatch")
 	}
 	return strings.ToLower(expected), nil
+}
+
+// validateListen checks syntax without binding a socket or resolving a hostname.
+func validateListen(address string) error {
+	if address == "" {
+		return nil
+	}
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return fmt.Errorf("invalid listen address %q: expected host:port", address)
+	}
+	if strings.ContainsAny(host, "/\\") || strings.IndexFunc(host, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) >= 0 {
+		return fmt.Errorf("invalid listen address %q: invalid host", address)
+	}
+	if strings.IndexFunc(port, func(r rune) bool { return r < '0' || r > '9' }) >= 0 {
+		return fmt.Errorf("invalid listen address %q: port must be 1..65535", address)
+	}
+	number, err := strconv.Atoi(port)
+	if err != nil || number < 1 || number > 65535 {
+		return fmt.Errorf("invalid listen address %q: port must be 1..65535", address)
+	}
+	return nil
+}
+
+// Skip an empty environment value so IsSet still distinguishes an explicit blank.
+type nonemptyListenSource struct{ cli.ValueSource }
+
+func (source nonemptyListenSource) Lookup() (string, bool) {
+	value, ok := source.ValueSource.Lookup()
+	return value, ok && value != ""
+}
+func (nonemptyListenSource) IsFromEnv() bool { return true }
+func (nonemptyListenSource) Key() string     { return "INVISI_RPC_LISTEN" }
+func listenEnvironment() cli.ValueSourceChain {
+	return cli.NewValueSourceChain(nonemptyListenSource{cli.EnvVar("INVISI_RPC_LISTEN")})
+}
+func validateSelectedListen(c *cli.Command) error {
+	if c.IsSet("listen") && c.String("listen") == "" {
+		return errors.New("invalid listen address: --listen must not be empty")
+	}
+	return validateListen(c.String("listen"))
 }

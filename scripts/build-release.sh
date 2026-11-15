@@ -23,6 +23,7 @@ for platform in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 
   CGO_ENABLED=0 GOOS="$target_os" GOARCH="$target_arch" \
     go build -trimpath -o "$package/$binary" ./cmd
   cp LICENSE README.md "$package/"
+  if [[ -f cammand.md ]]; then cp cammand.md "$package/"; fi
   if [[ "$target_os" == windows ]]; then
     (cd "$staging" && zip -qr "$output/$name.zip" "$name")
   else

@@ -16,7 +16,7 @@ The service does not depend on the wallet SDK. Shared settlement fixtures are ma
 
 Pushing a stable `vX.Y.Z` tag runs tests and publishes the multi-platform GHCR image and GitHub Release binaries from the same tagged source. Manual workflow dispatch accepts an existing tag. Existing Release notes are preserved when assets are uploaded.
 
-Release archives are named `invisi-protocol-rpc_vX.Y.Z_<os>_<arch>`, covering Linux, macOS (`darwin`) and Windows on `amd64` and `arm64`. Linux/macOS use `.tar.gz`; Windows uses `.zip`. Each archive contains the CLI, LICENSE and README. Binaries require no Go installation or C runtime. Download `SHA256SUMS-vX.Y.Z.txt` to verify archive checksums before extraction. Configure the deployment catalog and chain RPC as described below; credentials and local configuration are never bundled.
+Release archives are named `invisi-protocol-rpc_vX.Y.Z_<os>_<arch>`, covering Linux, macOS (`darwin`) and Windows on `amd64` and `arm64`. Linux/macOS use `.tar.gz`; Windows uses `.zip`. Each archive contains the CLI, LICENSE, README and the CLI reference `cammand.md` when available in the tagged source. Binaries require no Go installation or C runtime. Download `SHA256SUMS-vX.Y.Z.txt` to verify archive checksums before extraction. Configure the deployment catalog and chain RPC as described below; credentials and local configuration are never bundled.
 
 ## Initialize and run
 
@@ -34,136 +34,13 @@ export INVISI_RPC_DEPLOYMENT_FILE=../invisi-protocol/deployment/deployment.json
 
 The default data directory is `./invisi-protocol-rpc`. Set `INVISI_RPC_DATA_DIR` or pass `--dir` to select another directory. `init` also accepts an optional positional directory. The executable is built under `bin/` so it does not conflict with the data directory.
 
-`init` creates an empty configuration. Add and remove chains independently, including while the service is running:
+Full command syntax, flags, environment variables, database setup, snapshot bootstrap and operational examples are in [cammand.md](cammand.md).
 
-```sh
-./bin/invisi-protocol-rpc chain add 31337 --rpc http://127.0.0.1:8545
-./bin/invisi-protocol-rpc chain list
-./bin/invisi-protocol-rpc chain set-rpc 31337 --rpc http://127.0.0.1:9545
-./bin/invisi-protocol-rpc chain remove 31337
-```
+`init` creates an empty configuration without contacting a Chain RPC and refuses to overwrite it. Chain changes are locked, published atomically and reloaded while running. Removing a chain retains its database and snapshots. Each chain has independent state and shares the HTTP listener; `GET /v1` lists active routes at `/v1/chains/<chainId>`.
 
-Each command accepts `--dir`. Configuration updates are locked and published atomically. The running service automatically reloads changes. A new chain becomes available after deployment and saved-state validation; changing its RPC validates the replacement before switching. Failed replacement validation leaves the existing connection active and is retried. Removing a chain stops its workers and withdraws its HTTP route, retaining its database and snapshots. Adding it again resumes the saved checkpoint.
+The canonical [deployment catalog](../invisi-protocol/deployment/deployment.json) is owned by Protocol deployment tooling. No deployment records are embedded in this binary. `chain add` copies the selected deployment pins into the configuration; later catalog edits do not retarget an initialized node. Startup authenticates each upstream chain ID, runtime code and saved checkpoint before serving. The current catalog contains a controlled local deployment with mock verifiers.
 
-Each chain has independent indexing, database state and snapshots; all share one HTTP listener. An empty service can run while waiting for chains. `GET /v1` lists active chain IDs and RPC paths; `chain list` lists saved configuration, which can include chains still awaiting validation. Send JSON-RPC to `/v1/chains/<chainId>`, for example `/v1/chains/31337`.
-
-### Deployment catalog
-
-The canonical catalog is [invisi-protocol/deployment/deployment.json](../invisi-protocol/deployment/deployment.json). Protocol deployment tooling owns this single file; RPC does not keep a separate catalog. It contains Protocol addresses, runtime bytecode hashes and starting blocks for all networks, keyed only by chain ID. By default, `chain add` reads `./deployment.json` from the current working directory. Use `--deployment-file PATH` or `INVISI_RPC_DEPLOYMENT_FILE` to select its location. No deployment records are embedded in the binary. A missing or invalid file, or an absent chain ID, causes `chain add` to fail without modifying the configuration.
-
-The current catalog contains the controlled **31337 local deployment with mock verifiers**. Only completed deployments belong in the catalog; absent chain IDs return an error. Mainnets and testnets use the same structure.
-
-Deployment commands generate the records after checking successful receipts and runtime code. Point RPC at that output without manually copying its fields. For a private deployment file:
-
-```sh
-./bin/invisi-protocol-rpc init ./private-data
-./bin/invisi-protocol-rpc chain add 42161 --dir ./private-data \
-  --rpc https://YOUR_ARBITRUM_RPC \
-  --deployment-file /path/to/private-protocol/deployment/deployment.json
-```
-
-The file structure is `{ "version": 1, "chains": { "42161": { "name": "Private Arbitrum", "protocol": { "address": "0x…", "runtimeCodeHash": "0x…", "fromBlock": 123456 } } } }`. Use real deployment values; zero addresses and hashes are rejected. `runtimeCodeHash` is Keccak-256 of deployed runtime bytecode, including library addresses and immutables. `fromBlock` is the Protocol creation block.
-
-`chain add` resolves selected records into `config.json`. Subsequent catalog changes do not silently retarget an initialized node. `run` verifies every RPC's chain ID and runtime hash before serving. The database also rejects mismatched persisted deployment information.
-
-After chains have been added and snapshots exported, the directory contains:
-
-```text
-invisi-protocol-rpc/
-├── config.json                             # mode 0600; selected chains and settings
-├── chains/
-│   ├── 1/protocol.sqlite
-│   └── 42161/protocol.sqlite
-└── snapshots/
-    ├── 1/0x<protocol-address>/
-    └── 42161/0x<protocol-address>/
-        ├── <height>-<block-hash>-<sha256>.snapshot.json.gz
-        ├── <snapshot-file>.sha256
-        └── latest.json
-```
-
-`init` refuses to overwrite an existing configuration. `run` resumes each checkpoint, reconciles reorganizations, and waits normally when caught up. A missing required block, log range or historical state produces a chain-specific error identifying the height; an upstream behind its saved checkpoint is rejected at startup. All chains already configured at startup must pass validation before the listener opens. Chains added while running are validated independently; an unavailable new upstream does not stop existing chains.
-
-Settings live in `config.json`; see [config.example.json](config.example.json). Each entry under `chains` contains its own `chainRpc`, deployment, database and indexing settings. `chain add --snapshot-interval` sets the snapshot policy for that chain; edit individual entries for other policies. Chain settings are reloaded while running; changing `listen` or `maxConcurrentRequests` requires a restart. Indexing follows canonical `latest` immediately and reconciles reorgs. The old `confirmations` config field and CLI flag have been removed; remove this field from existing config files before upgrading. `snapshotInterval` defaults to `6h`; use `0s` to disable exports. `listen` defaults to `127.0.0.1:8080`.
-
-## Environment variables
-
-Command-line values override environment variables. Initialization settings are saved in `config.json`; `run --listen` or `INVISI_RPC_LISTEN` can override the saved listener without changing that file. An optional positional directory on `init` takes precedence over `--dir` and the environment.
-
-```sh
-export INVISI_RPC_DATA_DIR=./invisi-protocol-rpc
-export CHAIN_RPC_URL=http://127.0.0.1:8545
-export INVISI_RPC_LISTEN=127.0.0.1:8080
-
-./bin/invisi-protocol-rpc init
-./bin/invisi-protocol-rpc chain add 31337
-./bin/invisi-protocol-rpc run
-```
-
-| Environment variable | CLI option / purpose |
-| --- | --- |
-| `INVISI_RPC_DATA_DIR` | `--dir`; default `./invisi-protocol-rpc` |
-| `CHAIN_RPC_URL` | `chain add/set-rpc --rpc` |
-| `INVISI_RPC_DEPLOYMENT_FILE` | `chain add --deployment-file` |
-| `INVISI_RPC_DATABASE` | `chain add --database`; default `sqlite` |
-| `INVISI_RPC_DATABASE_URL`, `DATABASE_URL` | `chain add --database-url`; PostgreSQL URL |
-| `INVISI_RPC_LISTEN` | `init/run --listen` |
-| `INVISI_RPC_SNAPSHOT_INTERVAL` | `chain add --snapshot-interval` |
-| `INVISI_RPC_SNAPSHOT` | `chain add --snapshot`; local snapshot file |
-| `INVISI_RPC_SNAPSHOT_SHA256` | `chain add --snapshot-sha256`; expected hash |
-| `INVISI_RPC_SNAPSHOT_MAX_BYTES` | Import/inspect decompressed size limit |
-| `INVISI_RPC_CHAIN` | `snapshot export --chain` |
-| `INVISI_RPC_SNAPSHOT_OUTPUT` | `snapshot export --output` |
-
-Environment variables are read from the process; `.env` files are not loaded automatically.
-
-## Database selection and chain isolation
-
-SQLite creates a database per chain, with WAL, serialized writes and independent readers. PostgreSQL is available for shared deployments:
-
-```sh
-docker compose up -d postgres
-export DATABASE_URL='postgres://invisi:local-development-only@127.0.0.1:5432/invisi?sslmode=disable'
-
-./bin/invisi-protocol-rpc init ./data-pg
-./bin/invisi-protocol-rpc chain add 31337 --dir ./data-pg \
-  --rpc http://127.0.0.1:8545 --database postgres
-
-./bin/invisi-protocol-rpc run --dir ./data-pg
-```
-
-Set `--database-url POSTGRES_URL` separately when adding each chain. `DATABASE_URL` is the fallback when no explicit URL is supplied. **Use one database per chain operationally**, for example PostgreSQL databases `invisi_1` and `invisi_42161`, to isolate backups, rebuilds and load. Every backend also isolates records by `chainId + protocolAddress`, so sharing a PostgreSQL database is supported. There is no separate set of tables per chain.
-
-## Snapshots and bootstrap
-
-Snapshots are portable between SQLite and PostgreSQL. They contain public block/event records and deployment metadata; restoration reconstructs versioned public trees and nullifier state in one atomic database transaction. **No Chain RPC calls are made for blocks before the restored checkpoint.** Local reconstruction cost still grows with snapshot history.
-
-A running service exports every configured interval when its checkpoint changes. Snapshots are separated by chain ID and Protocol address. Export is transaction-consistent while indexing continues; files, SHA-256 sidecars and `latest.json` are published atomically. Existing snapshots are retained; operators choose their retention policy.
-
-```sh
-# Export on demand. Prints the snapshot path.
-./bin/invisi-protocol-rpc snapshot export --chain 31337
-
-# Check format, deployment and checkpoint.
-./bin/invisi-protocol-rpc snapshot inspect /trusted/index.snapshot.json.gz
-
-# Bootstrap a fresh directory and resume from the checkpoint.
-./bin/invisi-protocol-rpc init ./new-data
-./bin/invisi-protocol-rpc chain add 31337 --dir ./new-data \
-  --rpc http://127.0.0.1:8545 \
-  --snapshot /trusted/index.snapshot.json.gz \
-  --snapshot-sha256 YOUR_TRUSTED_SHA256
-
-./bin/invisi-protocol-rpc run --dir ./new-data
-```
-
-Use `chain add --snapshot FILE --snapshot-sha256 HASH` for each chain to restore. Snapshot deployments must match the catalog. `snapshot export --chain` is required when multiple chains are configured and optional for one chain.
-
-`--snapshot-sha256` checks the whole compressed file; otherwise an adjacent `.sha256` file is used when present. Obtain snapshots and checksums from a trusted publisher. A checksum detects corruption and authenticates only when its expected value came from a trusted source. Import rejects mismatched chain, Protocol, runtime hash, start block, source profile, discontinuous blocks, invalid footer, truncation and malformed gzip. Failure rolls back that chain's entire import. Retrying `chain add` reuses a previously completed import only when its complete persisted data matches the requested snapshot; differing populated targets are rejected. Configuration is published only after that chain’s database preparation succeeds.
-
-Default decompressed size limit is 8 GiB, with 64 MiB per record. For larger published snapshots, use `chain add --snapshot-max-bytes <bytes>` and `snapshot inspect --max-bytes <bytes>`. Transport/distribution is external: copy or download files first, then pass a local path. Startup checks the canonical saved checkpoint and current roots against on-chain `rootHistory` before serving restored state. If the upstream has pruned the required checkpoint or subsequent state, use an RPC that retains those heights or a newer snapshot.
-
-Snapshots replay stored normalized batches and are not a trustless proof of complete event history. Clients independently verify commitments, receipts, paths, known roots and spent state. A reorganization is reconciled by rolling back to an indexed common ancestor; a reorganization of the deployment starting block requires a reviewed reset.
+Snapshots contain public normalized history and can bootstrap SQLite or PostgreSQL. Obtain snapshots and expected checksums from a trusted publisher: a checksum alone does not authenticate historical records. Imports are atomic and deployment-bound; clients retain independent chain verification. See the [snapshot trust and bootstrap reference](cammand.md#snapshots-and-bootstrap). No keys, private notes or wallet secrets belong in this service.
 
 ## JSON-RPC
 
