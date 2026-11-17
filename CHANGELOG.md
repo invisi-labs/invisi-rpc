@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.5
+
+- Update the published Go SDK protocol and primitives dependencies to v1.2.5.
+- Adopt the Invisi RPC project, module and binary names and consume the SDK-owned Invisi Core ABI instead of duplicating contract definitions.
+- Preserve existing v1 APIs and indexed state; RPC does not require circuit assets or a prover runtime.
+
 ## 1.2.4
 
 - Extend `invisi_getNote` with trusted confirmation evidence for payment verification and expose read-only chain state for SDK wallet sessions.
