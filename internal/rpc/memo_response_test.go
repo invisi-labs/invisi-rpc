@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
 	"strings"
 	"testing"
+
+	"github.com/invisi-lab/invisi-rpc/internal/model"
 )
 
 func TestMemoUpdatesPreserveMaximumEnvelopes(t *testing.T) {

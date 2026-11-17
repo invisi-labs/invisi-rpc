@@ -1,4 +1,4 @@
-module github.com/invisi-lab/invisi-protocol-rpc
+module github.com/invisi-lab/invisi-rpc
 
 go 1.26.1
 

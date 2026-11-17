@@ -3,13 +3,14 @@ package storage
 import (
 	"context"
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/cryptography"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/invisi-lab/invisi-rpc/internal/cryptography"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
 )
 
 func TestNoteLookup(t *testing.T) {

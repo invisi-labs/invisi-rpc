@@ -3,10 +3,11 @@ package app
 import (
 	"context"
 	"fmt"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/config"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/storage"
 	"os"
 	"path/filepath"
+
+	"github.com/invisi-lab/invisi-rpc/internal/config"
+	"github.com/invisi-lab/invisi-rpc/internal/storage"
 )
 
 func OpenDatabase(ctx context.Context, c config.Chain) (storage.Backend, error) {

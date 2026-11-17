@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
 )
 
 type creditReader interface {

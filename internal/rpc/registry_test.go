@@ -2,10 +2,11 @@ package rpc
 
 import (
 	"context"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
 	"strings"
 	"testing"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
 )
 
 type registryBackend struct {

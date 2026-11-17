@@ -3,9 +3,10 @@ package rpc
 import (
 	"context"
 	"errors"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
 )
 
 // RegisteredReceivingAddress is the public lookup result. Registry event and

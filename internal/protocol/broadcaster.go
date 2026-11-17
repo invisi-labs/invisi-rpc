@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
-	"sort"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
 )
 
 func (d *DeploymentDecoder) decodeBroadcasters(batch *model.Batch, logs []types.Log) (err error) {

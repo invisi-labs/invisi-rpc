@@ -1,5 +1,5 @@
 // Package integration exercises the public service against an actual local EVM
-// and an isolated PostgreSQL schema. No protocol SDK is used.
+// and an isolated PostgreSQL schema using the SDK-owned contract ABI.
 package integration
 
 import (
@@ -24,20 +24,19 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	gethrpc "github.com/ethereum/go-ethereum/rpc"
-	deployments "github.com/invisi-lab/invisi-protocol-rpc"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/cryptography"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/indexer"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/protocol"
-	servicerpc "github.com/invisi-lab/invisi-protocol-rpc/internal/rpc"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/storage"
+	deployments "github.com/invisi-lab/invisi-rpc"
+	"github.com/invisi-lab/invisi-rpc/internal/cryptography"
+	"github.com/invisi-lab/invisi-rpc/internal/indexer"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
+	"github.com/invisi-lab/invisi-rpc/internal/protocol"
+	servicerpc "github.com/invisi-lab/invisi-rpc/internal/rpc"
+	"github.com/invisi-lab/invisi-rpc/internal/storage"
+	sdkcontracts "github.com/invisi-lab/invisi-sdk-go/protocol/contracts"
 	"github.com/jackc/pgx/v5"
 )
 
 func TestShieldFixtureUsesCanonicalABI(t *testing.T) {
-	pinned, err := os.ReadFile("testdata/shield.abi.json")
-	must(t, err)
-	a, err := abi.JSON(bytes.NewReader(pinned))
+	a, err := sdkcontracts.InvisiCoreMetaData.GetAbi()
 	must(t, err)
 	p := shieldParams{Token: common.HexToAddress("1"), NoteCommitments: [][32]byte{{2}}, Deadline: big.NewInt(100), FeeAmount: new(big.Int)}
 	f := fundingParams{Amount: big.NewInt(1), SigNonce: new(big.Int), Deadline: new(big.Int), Permit: tokenPermit{Deadline: new(big.Int)}}
@@ -81,9 +80,7 @@ func TestLocalChainPostgresLifecycle(t *testing.T) {
 	must(t, err)
 	protocolAddress := common.HexToAddress(env("TEST_PROTOCOL_ADDRESS", local.Protocol.Hex()))
 	token := common.HexToAddress(env("TEST_TOKEN_ADDRESS", "0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6"))
-	pinned, err := os.ReadFile("testdata/shield.abi.json")
-	must(t, err)
-	contractABI, err := abi.JSON(bytes.NewReader(pinned))
+	contractABI, err := sdkcontracts.InvisiCoreMetaData.GetAbi()
 	must(t, err)
 	logs, err := chain.FilterLogs(ctx, ethereum.FilterQuery{FromBlock: big.NewInt(0), Addresses: []common.Address{protocolAddress}})
 	must(t, err)

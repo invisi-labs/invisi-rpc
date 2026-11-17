@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/storage"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
+	"github.com/invisi-lab/invisi-rpc/internal/storage"
 )
 
 func TestTransactionUpdatesSQLiteRollback(t *testing.T) {

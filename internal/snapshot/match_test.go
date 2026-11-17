@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/storage"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
+	"github.com/invisi-lab/invisi-rpc/internal/storage"
 )
 
 func matchSQLite(t *testing.T, dep model.Deployment, batches []model.Batch) *storage.SQLiteStore {

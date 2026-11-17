@@ -15,10 +15,10 @@ trap 'rm -rf "$staging"' EXIT
 for platform in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
   target_os=${platform%/*}
   target_arch=${platform#*/}
-  name="invisi-protocol-rpc_${tag}_${target_os}_${target_arch}"
+  name="invisi-rpc_${tag}_${target_os}_${target_arch}"
   package="$staging/$name"
   mkdir -p "$package"
-  binary=invisi-protocol-rpc
+  binary=invisi-rpc
   if [[ "$target_os" == windows ]]; then binary+=.exe; fi
   CGO_ENABLED=0 GOOS="$target_os" GOARCH="$target_arch" \
     go build -trimpath -o "$package/$binary" ./cmd
@@ -33,4 +33,4 @@ for platform in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 
   echo "Built $name"
 done
 # Scope checksums to this release, including when reusing an output directory.
-(cd "$output" && sha256sum invisi-protocol-rpc_"$tag"_*.tar.gz invisi-protocol-rpc_"$tag"_*.zip > "SHA256SUMS-$tag.txt")
+(cd "$output" && sha256sum invisi-rpc_"$tag"_*.tar.gz invisi-rpc_"$tag"_*.zip > "SHA256SUMS-$tag.txt")

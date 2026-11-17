@@ -15,7 +15,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gofrs/flock"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
 )
 
 type Database struct {

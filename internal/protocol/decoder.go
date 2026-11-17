@@ -3,7 +3,6 @@ package protocol
 
 import (
 	"bytes"
-	_ "embed"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -14,18 +13,18 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
+	sdkcontracts "github.com/invisi-lab/invisi-sdk-go/protocol/contracts"
 )
-
-//go:generate go run generate_protocol_abi.go
-//go:embed InvisiProtocol.abi
-var pinnedABI []byte
 
 type Decoder struct{ abi abi.ABI }
 
 func NewDecoder() (*Decoder, error) {
-	a, e := abi.JSON(bytes.NewReader(pinnedABI))
-	return &Decoder{abi: a}, e
+	a, err := sdkcontracts.InvisiCoreMetaData.GetAbi()
+	if err != nil {
+		return nil, err
+	}
+	return &Decoder{abi: *a}, nil
 }
 
 type delivery struct {

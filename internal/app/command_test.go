@@ -8,17 +8,18 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"github.com/ethereum/go-ethereum/common"
-	deployment "github.com/invisi-lab/invisi-protocol-rpc"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/config"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/snapshot"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/storage"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ethereum/go-ethereum/common"
+	deployment "github.com/invisi-lab/invisi-rpc"
+	"github.com/invisi-lab/invisi-rpc/internal/config"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
+	"github.com/invisi-lab/invisi-rpc/internal/snapshot"
+	"github.com/invisi-lab/invisi-rpc/internal/storage"
 )
 
 func cliDeployment() model.Deployment {
@@ -49,7 +50,7 @@ func privateCatalog(t *testing.T, deps []model.Deployment) string {
 	return path
 }
 func privateInitArgs(dir, catalog string, ids ...string) []string {
-	return []string{"invisi-protocol-rpc", "chain", "add", ids[0], "--dir", dir, "--deployment-file", catalog, "--rpc", "http://127.0.0.1:8545"}
+	return []string{"invisi-rpc", "chain", "add", ids[0], "--dir", dir, "--deployment-file", catalog, "--rpc", "http://127.0.0.1:8545"}
 }
 func runCommand(t *testing.T, args ...string) string {
 	t.Helper()
@@ -135,7 +136,7 @@ func duplicateTreeSnapshot(t *testing.T, source string) string {
 func initDirectory(t *testing.T) string {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "node")
-	runCommand(t, "invisi-protocol-rpc", "init", "--dir", dir)
+	runCommand(t, "invisi-rpc", "init", "--dir", dir)
 	return dir
 }
 func TestCommandChainLifecycle(t *testing.T) {
@@ -145,7 +146,7 @@ func TestCommandChainLifecycle(t *testing.T) {
 		t.Fatalf("empty init: %+v %v", cfg, e)
 	}
 	before, _ := os.ReadFile(config.File(dir))
-	if e = Command(io.Discard).Run(context.Background(), []string{"invisi-protocol-rpc", "init", "--dir", dir}); e == nil {
+	if e = Command(io.Discard).Run(context.Background(), []string{"invisi-rpc", "init", "--dir", dir}); e == nil {
 		t.Fatal("overwrite accepted")
 	}
 	after, _ := os.ReadFile(config.File(dir))
@@ -160,20 +161,20 @@ func TestCommandChainLifecycle(t *testing.T) {
 	if e = Command(io.Discard).Run(context.Background(), args); e == nil {
 		t.Fatal("duplicate accepted")
 	}
-	runCommand(t, "invisi-protocol-rpc", "chain", "set-rpc", "31337", "--dir", dir, "--rpc", "https://user:password@example.com/token?secret=value")
-	list := runCommand(t, "invisi-protocol-rpc", "chain", "list", "--dir", dir)
+	runCommand(t, "invisi-rpc", "chain", "set-rpc", "31337", "--dir", dir, "--rpc", "https://user:password@example.com/token?secret=value")
+	list := runCommand(t, "invisi-rpc", "chain", "list", "--dir", dir)
 	if strings.Contains(list, "password") || strings.Contains(list, "secret") || strings.Contains(list, "token") {
 		t.Fatal(list)
 	}
 	cfg, _ = config.LoadDir(dir)
 	db := cfg.Chains[0].Database.Path
-	runCommand(t, "invisi-protocol-rpc", "chain", "remove", "31337", "--dir", dir)
+	runCommand(t, "invisi-rpc", "chain", "remove", "31337", "--dir", dir)
 	if _, e = os.Stat(db); e != nil {
 		t.Fatal("remove deleted DB", e)
 	}
 	runCommand(t, args...)
 	for _, verb := range []string{"remove", "set-rpc"} {
-		args := []string{"invisi-protocol-rpc", "chain", verb, "999", "--dir", dir}
+		args := []string{"invisi-rpc", "chain", verb, "999", "--dir", dir}
 		if verb == "set-rpc" {
 			args = append(args, "--rpc", "http://localhost")
 		}
@@ -210,7 +211,7 @@ func TestCommandInvalidSelectionsBeforeDatabaseChanges(t *testing.T) {
 	}
 	for _, flag := range []string{"chain", "deployment-file", "database", "snapshot", "snapshot-interval"} {
 		dir := filepath.Join(t.TempDir(), "bad")
-		if Command(io.Discard).Run(context.Background(), []string{"invisi-protocol-rpc", "init", "--dir", dir, "--" + flag, "value"}) == nil {
+		if Command(io.Discard).Run(context.Background(), []string{"invisi-rpc", "init", "--dir", dir, "--" + flag, "value"}) == nil {
 			t.Fatal("init accepted", flag)
 		}
 	}
@@ -255,11 +256,11 @@ func TestCommandSnapshotsBoundToCatalogAndPrevalidated(t *testing.T) {
 	if e != nil || head == nil || head.Number != 10 {
 		t.Fatal(head, e)
 	}
-	runCommand(t, "invisi-protocol-rpc", "chain", "remove", "31337", "--dir", dir)
+	runCommand(t, "invisi-rpc", "chain", "remove", "31337", "--dir", dir)
 	if output := runCommand(t, args...); !strings.Contains(output, "already restored") {
 		t.Fatal(output)
 	}
-	runCommand(t, "invisi-protocol-rpc", "chain", "remove", "31337", "--dir", dir)
+	runCommand(t, "invisi-rpc", "chain", "remove", "31337", "--dir", dir)
 	other := privateDeployments()[0]
 	other.RuntimeCodeHash = common.HexToHash("0x123")
 	args = privateInitArgs(dir, privateCatalog(t, []model.Deployment{other}), "31337")
@@ -338,7 +339,7 @@ func TestCommandRetryAfterSnapshotReplayFailure(t *testing.T) {
 }
 func TestCommandSnapshotExportRequiresSelectedChain(t *testing.T) {
 	dir := initDirectory(t)
-	base := []string{"invisi-protocol-rpc", "snapshot", "export", "--dir", dir}
+	base := []string{"invisi-rpc", "snapshot", "export", "--dir", dir}
 	if e := Command(io.Discard).Run(context.Background(), base); e == nil || !strings.Contains(e.Error(), "configured chain") {
 		t.Fatal(e)
 	}
@@ -356,18 +357,18 @@ func TestCommandSnapshotExportRequiresSelectedChain(t *testing.T) {
 	if e := Command(io.Discard).Run(context.Background(), append(base, "--chain", "999")); e == nil {
 		t.Fatal("unknown export")
 	}
-	output := runCommand(t, "invisi-protocol-rpc", "snapshot", "inspect", path)
+	output := runCommand(t, "invisi-rpc", "snapshot", "inspect", path)
 	var h snapshot.Header
 	if e := json.Unmarshal([]byte(output), &h); e != nil || h.Deployment != deps[0] {
 		t.Fatal(e, h)
 	}
-	if Command(io.Discard).Run(context.Background(), []string{"invisi-protocol-rpc", "snapshot", "inspect", "--max-bytes", "1", path}) == nil {
+	if Command(io.Discard).Run(context.Background(), []string{"invisi-rpc", "snapshot", "inspect", "--max-bytes", "1", path}) == nil {
 		t.Fatal("ignored inspect limit")
 	}
 }
 func TestCommandHelp(t *testing.T) {
 	for _, path := range [][]string{{}, {"init"}, {"run"}, {"chain"}, {"chain", "add"}, {"chain", "list"}, {"snapshot", "export"}, {"snapshot", "inspect"}} {
-		args := append([]string{"invisi-protocol-rpc"}, path...)
+		args := append([]string{"invisi-rpc"}, path...)
 		if output := runCommand(t, append(args, "--help")...); !strings.Contains(output, "USAGE:") {
 			t.Fatal(output)
 		}
@@ -382,7 +383,7 @@ func TestCommandAddRequiresSelectedDeploymentFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	args := []string{"invisi-protocol-rpc", "chain", "add", "31337", "--dir", dir, "--rpc", "http://localhost:8545"}
+	args := []string{"invisi-rpc", "chain", "add", "31337", "--dir", dir, "--rpc", "http://localhost:8545"}
 	if err = Command(io.Discard).Run(context.Background(), args); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("missing deployment file accepted: %v", err)
 	}

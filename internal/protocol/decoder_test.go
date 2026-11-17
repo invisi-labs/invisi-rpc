@@ -2,12 +2,13 @@ package protocol
 
 import (
 	"encoding/json"
+	"math/big"
+	"testing"
+
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
-	"math/big"
-	"testing"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
 )
 
 func fixture(t *testing.T) (*Decoder, func(string, uint, common.Hash, []any, ...any) types.Log) {

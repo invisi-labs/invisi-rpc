@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
-	"github.com/jackc/pgx/v5"
 	"math"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
+	"github.com/jackc/pgx/v5"
 )
 
 // Note looks up a leaf through an index, then reads its output and proof in one snapshot.

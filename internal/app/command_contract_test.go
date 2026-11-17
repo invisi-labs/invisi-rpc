@@ -3,12 +3,13 @@ package app
 import (
 	"bytes"
 	"context"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/config"
-	"github.com/urfave/cli/v3"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/invisi-lab/invisi-rpc/internal/config"
+	"github.com/urfave/cli/v3"
 )
 
 func TestCommandDirectoryContract(t *testing.T) {

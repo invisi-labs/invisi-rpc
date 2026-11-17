@@ -7,16 +7,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/cryptography"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/merkle"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
 	"io"
 	"math"
-	_ "modernc.org/sqlite"
 	"net/url"
 	"path/filepath"
 	"strings"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/invisi-lab/invisi-rpc/internal/cryptography"
+	"github.com/invisi-lab/invisi-rpc/internal/merkle"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
+	_ "modernc.org/sqlite"
 )
 
 type sqliteDB struct{ *sql.DB }

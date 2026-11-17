@@ -15,12 +15,12 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/config"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/snapshot"
+	"github.com/invisi-lab/invisi-rpc/internal/config"
+	"github.com/invisi-lab/invisi-rpc/internal/snapshot"
 	"github.com/urfave/cli/v3"
 )
 
-const DefaultDataDir = "./invisi-protocol-rpc"
+const DefaultDataDir = "./invisi-rpc"
 
 func dataDirFlag() *cli.StringFlag {
 	return &cli.StringFlag{Name: "dir", Value: DefaultDataDir, Sources: cli.EnvVars("INVISI_RPC_DATA_DIR"), Usage: "Service data directory"}
@@ -34,7 +34,7 @@ func selectedDataDir(c *cli.Command) string {
 }
 
 func Command(output io.Writer) *cli.Command {
-	return &cli.Command{Name: "invisi-protocol-rpc", Usage: "Index public Invisi protocol data for selected chains", Writer: output, SliceFlagSeparator: "\n", Flags: []cli.Flag{dataDirFlag()}, Commands: []*cli.Command{
+	return &cli.Command{Name: "invisi-rpc", Usage: "Index public Invisi protocol data for selected chains", Writer: output, SliceFlagSeparator: "\n", Flags: []cli.Flag{dataDirFlag()}, Commands: []*cli.Command{
 		{Name: "init", Usage: "Initialize an empty service directory", ArgsUsage: "[DATA_DIR]", Flags: []cli.Flag{&cli.StringFlag{Name: "listen", Sources: listenEnvironment(), Value: "127.0.0.1:8080"}}, Action: func(ctx context.Context, c *cli.Command) error { return initialize(ctx, c, output) }},
 		chainCommand(output),
 		{Name: "run", Usage: "Resume all configured chains on one listener", Flags: []cli.Flag{&cli.StringFlag{Name: "listen", Sources: listenEnvironment(), Usage: "Override the saved listen address"}}, Action: func(ctx context.Context, c *cli.Command) error {
@@ -162,7 +162,7 @@ func initialize(ctx context.Context, c *cli.Command, output io.Writer) error {
 	if err = config.Save(dir, config.Config{Listen: c.String("listen"), Chains: []config.Chain{}}); err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(output, "Initialized %s. Add chains with chain add ID --rpc URL; run: invisi-protocol-rpc run --dir %s\n", dir, dir)
+	_, err = fmt.Fprintf(output, "Initialized %s. Add chains with chain add ID --rpc URL; run: invisi-rpc run --dir %s\n", dir, dir)
 	return err
 }
 func snapshotDigest(ctx context.Context, path, expected string) (string, error) {

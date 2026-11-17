@@ -3,10 +3,11 @@ package rpc
 import (
 	"context"
 	"encoding/json"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/finality"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
 	"testing"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/invisi-lab/invisi-rpc/internal/finality"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
 )
 
 type fixedFinality struct{ value finality.Snapshot }

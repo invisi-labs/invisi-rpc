@@ -18,8 +18,9 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/storage"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
+	"github.com/invisi-lab/invisi-rpc/internal/storage"
+	sdkcontracts "github.com/invisi-lab/invisi-sdk-go/protocol/contracts"
 )
 
 type fakeStore struct {
@@ -323,14 +324,36 @@ func TestSQLiteRestoreRebuildsMembership(t *testing.T) {
 }
 
 func TestPinnedABIHashMatchesSource(t *testing.T) {
-	b, err := os.ReadFile("../protocol/InvisiProtocol.abi")
+	var entries []json.RawMessage
+	if err := json.Unmarshal([]byte(sdkcontracts.InvisiCoreMetaData.ABI), &entries); err != nil {
+		t.Fatal(err)
+	}
+	var events []json.RawMessage
+	for _, entry := range entries {
+		var item struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(entry, &item); err != nil {
+			t.Fatal(err)
+		}
+		if item.Type == "event" {
+			events = append(events, entry)
+		}
+	}
+	b, err := json.MarshalIndent(events, "", "  ")
 	if err != nil {
 		t.Fatal(err)
 	}
-	registry, err := os.ReadFile("../protocol/InvisiAddressRegistry.abi")
+	b = append(b, '\n')
+	var registryEntries []json.RawMessage
+	if err := json.Unmarshal([]byte(sdkcontracts.InvisiAddressRegistryMetaData.ABI), &registryEntries); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := json.MarshalIndent(registryEntries, "", "  ")
 	if err != nil {
 		t.Fatal(err)
 	}
+	registry = append(registry, '\n')
 	broadcaster, err := os.ReadFile("../protocol/BroadcasterRegistry.abi")
 	if err != nil {
 		t.Fatal(err)
@@ -682,5 +705,18 @@ func TestBroadcasterSnapshotRoundTripAndPins(t *testing.T) {
 	changed.BroadcasterRegistry = nil
 	if err = Restore(ctx, dest, changed, path, fileHash(t, path)); err == nil {
 		t.Fatal("accepted omitted broadcaster pins")
+	}
+}
+
+func TestMetadataOnlyCoreRenameKeepsExistingSnapshotHeaders(t *testing.T) {
+	dep, _ := fixture()
+	h := header(dep)
+	h.ABIHash = metadataEquivalentABIHash
+	if err := checkHeader(h, &dep); err != nil {
+		t.Fatal(err)
+	}
+	h.ABIHash = strings.Repeat("f", 64)
+	if err := checkHeader(h, &dep); err == nil {
+		t.Fatal("unreviewed ABI fingerprint accepted")
 	}
 }

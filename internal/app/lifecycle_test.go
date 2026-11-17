@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/config"
+	"github.com/invisi-lab/invisi-rpc/internal/config"
 )
 
 func launchReloadService(t *testing.T, cfg config.Config, dir string) (context.CancelFunc, <-chan error) {

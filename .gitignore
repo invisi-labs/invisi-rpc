@@ -34,7 +34,7 @@ go.work.sum
 
 # Local service configuration and build output
 config.json
-/invisi-protocol-rpc
+/invisi-rpc
 .idea/
 
 /bin/

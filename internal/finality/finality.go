@@ -11,7 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
 )
 
 type Head struct {

@@ -2,11 +2,12 @@ package protocol
 
 import (
 	"bytes"
+	"testing"
+
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
-	"testing"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
 )
 
 func TestBroadcasterEvents(t *testing.T) {

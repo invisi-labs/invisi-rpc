@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  IMAGE: ghcr.io/invisi-lab/invisi-protocol-rpc
+  IMAGE: ghcr.io/invisi-lab/invisi-rpc
   RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
@@ -89,7 +89,7 @@ jobs:
           push: true
           tags: ${{ env.IMAGE }}:${{ steps.version.outputs.value }}
           labels: |
-            org.opencontainers.image.title=Invisi Protocol RPC
+            org.opencontainers.image.title=Invisi RPC
             org.opencontainers.image.description=Public Invisi data, membership paths
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ steps.source.outputs.commit }}

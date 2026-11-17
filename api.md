@@ -1,4 +1,4 @@
-# Invisi Protocol RPC API
+# Invisi RPC API
 
 This is the public HTTP and JSON-RPC reference for this source checkout. Operator commands, configuration, database setup, snapshots and CLI environment variables stay in [cammand.md](cammand.md). The service indexes public chain facts; it never accepts wallet keys, note openings, signing requests, proof witnesses or transaction submissions.
 
@@ -74,7 +74,7 @@ Clients must preserve integer precision; JSON uint64 fields can exceed JavaScrip
 
 `Root` is `{treeId,leafCount,root,block}`. `Membership` is `{anchor:Root,leafIndex,commitment,siblings:[Hash,...]}` (the field is `anchor`, not `root`); the fixed-depth physical NoteTree proof has 16 siblings. `NoteOutput` is `{block,treeId,leafIndex,commitment,token,ciphertext,clue,transactionHash,logIndex,kind}`. `CreditState` has the same metadata but replaces ciphertext/clue with `deliveries:[{ciphertext,clue},{ciphertext,clue}]` in on-chain owner/spender order. No recipient attribution is inferred.
 
-`Event` is `{block,name,transactionHash,logIndex,data}`. `data` is the normalized ABI event argument object from the pinned [Protocol ABI](internal/protocol/InvisiProtocol.abi); nested structs use lower-camel keys, addresses/bytes are hex, and uint256/uint64 are decimal strings. This low-level method includes all decoded event names; consumers should use the ABI corresponding to their pinned server version rather than assume an event-specific universal schema. Credit transitions select `CreditCreated`, `CreditDraw`, `CreditUpdated`, `CreditRevoked`.
+`Event` is `{block,name,transactionHash,logIndex,data}`. `data` is the normalized ABI event argument object from the pinned [Core ABI](../invisi-sdk-go/protocol/contracts/abi/InvisiCore.abi.json); nested structs use lower-camel keys, addresses/bytes are hex, and uint256/uint64 are decimal strings. This low-level method includes all decoded event names; consumers should use the ABI corresponding to their pinned server version rather than assume an event-specific universal schema. Credit transitions select `CreditCreated`, `CreditDraw`, `CreditUpdated`, `CreditRevoked`.
 
 `Batch` is `{block,logs,events,createdTrees,insertions,outputs,creditStates,creditNullifiers,nullifiers}` with optional `registrations` and `broadcasters`. `logs` use Ethereum log JSON (hex quantities such as logIndex/blockNumber); normalized projections use the types above. Insertion entries are `{treeId,startLeafIndex,commitments,logIndex}`. Receiving-key updates are `{walletIdentity,viewingPublicKey,clueKey,nonce,logIndex}` (nonce decimal string). Broadcaster updates are `{operator,endpoint?,metadataURI?,quoteSigner,feeRecipient,enabled?,logIndex}`. Absent optional collections may be omitted; underlying nil collections may be JSON null. The typed per-transaction APIs below make explicit empty-array guarantees after indexing.
 

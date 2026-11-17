@@ -4,15 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/cryptography"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
 	"io"
 	"math/big"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/invisi-lab/invisi-rpc/internal/cryptography"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
 )
 
 func TestSQLiteAtomicHistoryRollback(t *testing.T) {

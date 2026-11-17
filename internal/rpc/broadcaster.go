@@ -3,8 +3,9 @@ package rpc
 import (
 	"context"
 	"errors"
+
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
 )
 
 // GetBroadcasters returns registry declarations, not an endorsement or live health check.

@@ -4,8 +4,9 @@ package merkle
 
 import (
 	"fmt"
+
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/cryptography"
+	"github.com/invisi-lab/invisi-rpc/internal/cryptography"
 )
 
 const Depth = cryptography.TreeDepth

@@ -2,10 +2,11 @@ package merkle
 
 import (
 	"errors"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/cryptography"
 	"math/big"
 	"testing"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/invisi-lab/invisi-rpc/internal/cryptography"
 )
 
 type coordinate struct {

@@ -2,6 +2,12 @@
 .idea
 .env
 config.json
-invisi-protocol-rpc
+invisi-rpc
 
 bin
+
+go.work
+
+go.work.sum
+
+invisi-protocol-rpc

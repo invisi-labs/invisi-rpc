@@ -2,11 +2,12 @@ package rpc
 
 import (
 	"context"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/storage"
 	"path/filepath"
 	"testing"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
+	"github.com/invisi-lab/invisi-rpc/internal/storage"
 )
 
 func TestBroadcasterJSONRPC(t *testing.T) {

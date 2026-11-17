@@ -18,14 +18,16 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/storage"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
+	"github.com/invisi-lab/invisi-rpc/internal/storage"
 )
 
 const (
-	FormatVersion                     = 2
-	SourceProfile                     = "invisi-protocol-v1-postpaid-credit-typed"
-	ABIHash                           = "b0eb65498a50753ab8e0e72c415fbed1afc08011e689e9d946d19f1b85d1b14e"
+	FormatVersion = 2
+	SourceProfile = "invisi-protocol-v1-postpaid-credit-typed"
+	ABIHash       = "89a06cf82a788866b987ea2166661e9ef80f89ecf92adc952cdcf711d94988e1"
+	// Source-only type names changed; this reviewed fingerprint has identical event layouts.
+	metadataEquivalentABIHash         = "b0eb65498a50753ab8e0e72c415fbed1afc08011e689e9d946d19f1b85d1b14e"
 	DefaultMaxDecompressedBytes int64 = 8 << 30
 	MaxRecordBytes                    = 64 << 20
 )
@@ -57,7 +59,7 @@ func header(dep model.Deployment) Header {
 	return Header{Version: FormatVersion, SourceProfile: SourceProfile, ABIHash: ABIHash, Deployment: dep}
 }
 func checkHeader(h Header, dep *model.Deployment) error {
-	if h.Version != FormatVersion || h.SourceProfile != SourceProfile || h.ABIHash != ABIHash {
+	if h.Version != FormatVersion || h.SourceProfile != SourceProfile || (h.ABIHash != ABIHash && h.ABIHash != metadataEquivalentABIHash) {
 		return errors.New("unsupported snapshot version or source profile")
 	}
 	if h.Checkpoint != nil {

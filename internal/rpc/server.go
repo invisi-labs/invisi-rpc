@@ -15,9 +15,9 @@ import (
 	"github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	"github.com/ethereum/go-ethereum/common"
 	gethrpc "github.com/ethereum/go-ethereum/rpc"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/finality"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/protocol"
+	"github.com/invisi-lab/invisi-rpc/internal/finality"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
+	"github.com/invisi-lab/invisi-rpc/internal/protocol"
 )
 
 type Backend interface {

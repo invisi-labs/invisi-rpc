@@ -10,10 +10,10 @@ import (
 
 	"github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/cryptography"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/finality"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/indexer"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
+	"github.com/invisi-lab/invisi-rpc/internal/cryptography"
+	"github.com/invisi-lab/invisi-rpc/internal/finality"
+	"github.com/invisi-lab/invisi-rpc/internal/indexer"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
 )
 
 // noteAPI changes only the JSON-RPC selector; the typed historic API is unchanged.

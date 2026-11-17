@@ -22,10 +22,10 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	gethrpc "github.com/ethereum/go-ethereum/rpc"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/config"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
-	apirpc "github.com/invisi-lab/invisi-protocol-rpc/internal/rpc"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/storage"
+	"github.com/invisi-lab/invisi-rpc/internal/config"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
+	apirpc "github.com/invisi-lab/invisi-rpc/internal/rpc"
+	"github.com/invisi-lab/invisi-rpc/internal/storage"
 )
 
 // chainRPCFixture exposes actual Ethereum JSON-RPC wire responses, allowing the

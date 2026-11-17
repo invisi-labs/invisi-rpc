@@ -3,8 +3,6 @@ package storage
 import (
 	"context"
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
 	"io"
 	"math/big"
 	"os"
@@ -12,6 +10,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
 )
 
 func TestSQLiteBroadcasterLifecycle(t *testing.T) {

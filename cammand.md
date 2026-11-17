@@ -1,4 +1,4 @@
-# Invisi Protocol RPC command reference
+# Invisi RPC command reference
 
 This reference describes the executable CLI. JSON-RPC methods such as `invisi_getNote` are HTTP API methods, not shell subcommands; see the [API reference](api.md).
 
@@ -7,12 +7,12 @@ This reference describes the executable CLI. JSON-RPC methods such as `invisi_ge
 Use Go 1.26+ to build; a released binary requires no Go installation or C runtime. SQLite is embedded. PostgreSQL deployments require PostgreSQL 16+. Initialization and help need no network, deployment catalog or database server; running a configured chain requires an EVM Chain RPC with the required historical state.
 
 ```sh
-go build -o ./bin/invisi-protocol-rpc ./cmd
-./bin/invisi-protocol-rpc --help
+go build -o ./bin/invisi-rpc ./cmd
+./bin/invisi-rpc --help
 ```
 
 ```text
-invisi-protocol-rpc [--dir DATA_DIR] COMMAND
+invisi-rpc [--dir DATA_DIR] COMMAND
   init [DATA_DIR] [--listen HOST:PORT]
   run [--listen HOST:PORT]
   chain
@@ -35,16 +35,16 @@ invisi-protocol-rpc [--dir DATA_DIR] COMMAND
 1. Optional `init DATA_DIR` positional argument.
 2. Explicit `--dir` (the closest/later explicit value wins).
 3. `INVISI_RPC_DATA_DIR`.
-4. `./invisi-protocol-rpc`, relative to the current working directory.
+4. `./invisi-rpc`, relative to the current working directory.
 
 An empty environment value, explicit `--dir ""`, or empty positional init directory uses the documented default, never the working directory itself. Relative paths are resolved from the current working directory. Flags remain recognized after positional arguments:
 
 ```sh
-./bin/invisi-protocol-rpc --dir ./ancestor init ./chosen --dir ./leaf --listen 127.0.0.1:8090
+./bin/invisi-rpc --dir ./ancestor init ./chosen --dir ./leaf --listen 127.0.0.1:8090
 # Initializes ./chosen with listener 127.0.0.1:8090.
-./bin/invisi-protocol-rpc --dir ./chosen chain list
-./bin/invisi-protocol-rpc chain --dir ./chosen list
-./bin/invisi-protocol-rpc chain list --dir ./chosen
+./bin/invisi-rpc --dir ./chosen chain list
+./bin/invisi-rpc chain --dir ./chosen list
+./bin/invisi-rpc chain list --dir ./chosen
 ```
 
 `init` accepts at most one positional directory; `run`, `chain list` and `snapshot export` accept none. Chain mutations and snapshot inspection require exactly one positional argument. Unknown commands/flags, excess arguments and help do not initialize a service, open its database or contact upstreams. No config JSON import is supported: `init config.json`, a directory ending in `.json` (case-insensitive), and an existing regular-file directory target are rejected. `--` ends flag parsing when a positional path begins with `-`.
@@ -52,9 +52,9 @@ An empty environment value, explicit `--dir ""`, or empty positional init direct
 ## Initialization, listener and shutdown
 
 ```sh
-./bin/invisi-protocol-rpc init ./data --listen 127.0.0.1:8080
-./bin/invisi-protocol-rpc run --dir ./data
-./bin/invisi-protocol-rpc run --dir ./data --listen 0.0.0.0:8080
+./bin/invisi-rpc init ./data --listen 127.0.0.1:8080
+./bin/invisi-rpc run --dir ./data
+./bin/invisi-rpc run --dir ./data --listen 0.0.0.0:8080
 ```
 
 `init` saves an empty chain list and the listener (default `127.0.0.1:8080`), creates private directories (0700) and configuration (0600), and refuses to overwrite an existing `config.json`. It generates no wallet keys. Keep RPC and PostgreSQL credentials in this private directory; do not commit them. A `.config.lock` coordinates atomic configuration publication. Existing directory permissions are not reset by initialization.
@@ -86,10 +86,10 @@ Every leaf inherits `--dir`; every command supports help. `ID` must be a canonic
 `init` creates an empty configuration. Add and remove chains independently, including while the service is running:
 
 ```sh
-./bin/invisi-protocol-rpc chain add 31337 --rpc http://127.0.0.1:8545
-./bin/invisi-protocol-rpc chain list
-./bin/invisi-protocol-rpc chain set-rpc 31337 --rpc http://127.0.0.1:9545
-./bin/invisi-protocol-rpc chain remove 31337
+./bin/invisi-rpc chain add 31337 --rpc http://127.0.0.1:8545
+./bin/invisi-rpc chain list
+./bin/invisi-rpc chain set-rpc 31337 --rpc http://127.0.0.1:9545
+./bin/invisi-rpc chain remove 31337
 ```
 
 Each command accepts `--dir`. Configuration updates are locked and published atomically. The running service automatically reloads changes. A new chain becomes available after deployment and saved-state validation; changing its RPC validates the replacement before switching. Failed replacement validation leaves the existing connection active and is retried. Removing a chain stops its workers and withdraws its HTTP route, retaining its database and snapshots. Adding it again resumes the saved checkpoint.
@@ -98,15 +98,15 @@ Each chain has independent indexing, database state and snapshots; all share one
 
 ### Deployment catalog
 
-The canonical catalog is [invisi-protocol/deployment/deployment.json](../invisi-protocol/deployment/deployment.json). Protocol deployment tooling owns this single file; RPC does not keep a separate catalog. It contains Protocol addresses, runtime bytecode hashes and starting blocks for all networks, keyed only by chain ID. By default, `chain add` reads `./deployment.json` from the current working directory. Use `--deployment-file PATH` or `INVISI_RPC_DEPLOYMENT_FILE` to select its location. No deployment records are embedded in the binary. A missing or invalid file, or an absent chain ID, causes `chain add` to fail without modifying the configuration.
+The canonical catalog is [invisi-core/deployment/deployment.json](../invisi-core/deployment/deployment.json). Protocol deployment tooling owns this single file; RPC does not keep a separate catalog. It contains Protocol addresses, runtime bytecode hashes and starting blocks for all networks, keyed only by chain ID. By default, `chain add` reads `./deployment.json` from the current working directory. Use `--deployment-file PATH` or `INVISI_RPC_DEPLOYMENT_FILE` to select its location. No deployment records are embedded in the binary. A missing or invalid file, or an absent chain ID, causes `chain add` to fail without modifying the configuration.
 
 The current catalog contains the controlled **31337 local deployment with mock verifiers**. Only completed deployments belong in the catalog; absent chain IDs return an error. Mainnets and testnets use the same structure.
 
 Deployment commands generate the records after checking successful receipts and runtime code. Point RPC at that output without manually copying its fields. For a private deployment file:
 
 ```sh
-./bin/invisi-protocol-rpc init ./private-data
-./bin/invisi-protocol-rpc chain add 42161 --dir ./private-data \
+./bin/invisi-rpc init ./private-data
+./bin/invisi-rpc chain add 42161 --dir ./private-data \
   --rpc https://YOUR_ARBITRUM_RPC \
   --deployment-file /path/to/private-protocol/deployment/deployment.json
 ```
@@ -122,7 +122,7 @@ Index format 3 and snapshot format 2 retain explicit canonical block timestamps,
 After chains have been added and snapshots exported, the directory contains:
 
 ```text
-invisi-protocol-rpc/
+invisi-rpc/
 ├── config.json                             # mode 0600; selected chains and settings
 ├── chains/
 │   ├── 1/protocol.sqlite
@@ -144,18 +144,18 @@ Settings live in `config.json`; see [config.example.json](config.example.json). 
 Command-line values override environment variables. Initialization settings are saved in `config.json`; `run --listen` or `INVISI_RPC_LISTEN` can override the saved listener without changing that file. An optional positional directory on `init` takes precedence over `--dir` and the environment.
 
 ```sh
-export INVISI_RPC_DATA_DIR=./invisi-protocol-rpc
+export INVISI_RPC_DATA_DIR=./invisi-rpc
 export CHAIN_RPC_URL=http://127.0.0.1:8545
 export INVISI_RPC_LISTEN=127.0.0.1:8080
 
-./bin/invisi-protocol-rpc init
-./bin/invisi-protocol-rpc chain add 31337
-./bin/invisi-protocol-rpc run
+./bin/invisi-rpc init
+./bin/invisi-rpc chain add 31337
+./bin/invisi-rpc run
 ```
 
 | Environment variable | CLI option / purpose |
 | --- | --- |
-| `INVISI_RPC_DATA_DIR` | `--dir`; default `./invisi-protocol-rpc` |
+| `INVISI_RPC_DATA_DIR` | `--dir`; default `./invisi-rpc` |
 | `CHAIN_RPC_URL` | `chain add/set-rpc --rpc` |
 | `INVISI_RPC_DEPLOYMENT_FILE` | `chain add --deployment-file` |
 | `INVISI_RPC_DATABASE` | `chain add --database`; default `sqlite` |
@@ -178,11 +178,11 @@ SQLite creates a database per chain, with WAL, serialized writes and independent
 docker compose up -d postgres
 export DATABASE_URL='postgres://invisi:local-development-only@127.0.0.1:5432/invisi?sslmode=disable'
 
-./bin/invisi-protocol-rpc init ./data-pg
-./bin/invisi-protocol-rpc chain add 31337 --dir ./data-pg \
+./bin/invisi-rpc init ./data-pg
+./bin/invisi-rpc chain add 31337 --dir ./data-pg \
   --rpc http://127.0.0.1:8545 --database postgres
 
-./bin/invisi-protocol-rpc run --dir ./data-pg
+./bin/invisi-rpc run --dir ./data-pg
 ```
 
 Set `--database-url POSTGRES_URL` separately when adding each chain. `DATABASE_URL` is the fallback when no explicit URL is supplied. **Use one database per chain operationally**, for example PostgreSQL databases `invisi_1` and `invisi_42161`, to isolate backups, rebuilds and load. Every backend also isolates records by `chainId + protocolAddress`, so sharing a PostgreSQL database is supported. There is no separate set of tables per chain.
@@ -195,19 +195,19 @@ A running service exports every configured interval when its checkpoint changes.
 
 ```sh
 # Export on demand. Prints the snapshot path.
-./bin/invisi-protocol-rpc snapshot export --chain 31337
+./bin/invisi-rpc snapshot export --chain 31337
 
 # Check format, deployment and checkpoint.
-./bin/invisi-protocol-rpc snapshot inspect /trusted/index.snapshot.json.gz
+./bin/invisi-rpc snapshot inspect /trusted/index.snapshot.json.gz
 
 # Bootstrap a fresh directory and resume from the checkpoint.
-./bin/invisi-protocol-rpc init ./new-data
-./bin/invisi-protocol-rpc chain add 31337 --dir ./new-data \
+./bin/invisi-rpc init ./new-data
+./bin/invisi-rpc chain add 31337 --dir ./new-data \
   --rpc http://127.0.0.1:8545 \
   --snapshot /trusted/index.snapshot.json.gz \
   --snapshot-sha256 YOUR_TRUSTED_SHA256
 
-./bin/invisi-protocol-rpc run --dir ./new-data
+./bin/invisi-rpc run --dir ./new-data
 ```
 
 Use `chain add --snapshot FILE --snapshot-sha256 HASH` for each chain to restore. Snapshot deployments must match the catalog. `snapshot export --chain` is required when multiple chains are configured and optional for one chain.

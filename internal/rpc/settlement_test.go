@@ -3,18 +3,20 @@ package rpc
 import (
 	"context"
 	"encoding/json"
+	"math/big"
+	"os"
+	"strings"
+	"testing"
+
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/protocol"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
+	"github.com/invisi-lab/invisi-rpc/internal/protocol"
+	sdkcontracts "github.com/invisi-lab/invisi-sdk-go/protocol/contracts"
 	"github.com/invisi-lab/invisi-sdk-go/protocol/settlement"
-	"math/big"
-	"os"
-	"strings"
-	"testing"
 )
 
 type settlementChain struct {
@@ -69,10 +71,7 @@ func settlementFixture(t *testing.T) (*API, *settlementChain, *transactionBacken
 	tx := types.NewTx(&types.LegacyTx{To: &address, Data: data})
 	block := types.NewBlockWithHeader(&types.Header{Number: big.NewInt(10), Time: 100}).WithBody(types.Body{Transactions: []*types.Transaction{tx}})
 	b := model.Block{Number: 10, Hash: block.Hash(), ParentHash: block.ParentHash(), Timestamp: 100}
-	aRaw, e := os.ReadFile("../protocol/InvisiProtocol.abi")
-	if e != nil {
-		t.Fatal(e)
-	}
+	aRaw := []byte(sdkcontracts.InvisiCoreMetaData.ABI)
 	contract, e := abi.JSON(strings.NewReader(string(aRaw)))
 	if e != nil {
 		t.Fatal(e)
@@ -220,10 +219,7 @@ func TestSettlementAggregateNativeMembersAndPooledPull(t *testing.T) {
 	address := a.Deployment.Protocol
 	chain.tx = types.NewTx(&types.LegacyTx{To: &address, Data: data})
 	chain.block = chain.block.WithBody(types.Body{Transactions: []*types.Transaction{chain.tx}})
-	raw, e = os.ReadFile("../protocol/InvisiProtocol.abi")
-	if e != nil {
-		t.Fatal(e)
-	}
+	raw = []byte(sdkcontracts.InvisiCoreMetaData.ABI)
 	contract, e := abi.JSON(strings.NewReader(string(raw)))
 	if e != nil {
 		t.Fatal(e)

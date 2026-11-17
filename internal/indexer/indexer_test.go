@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
+	"testing"
+
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
-	"math/big"
-	"testing"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
 )
 
 type fakeChain struct {

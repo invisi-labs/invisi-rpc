@@ -11,8 +11,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/core/types"
 	gethrpc "github.com/ethereum/go-ethereum/rpc"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/finality"
-	apirpc "github.com/invisi-lab/invisi-protocol-rpc/internal/rpc"
+	"github.com/invisi-lab/invisi-rpc/internal/finality"
+	apirpc "github.com/invisi-lab/invisi-rpc/internal/rpc"
 )
 
 type finalityFixture struct {

@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	source := filepath.Join("..", "..", "..", "invisi-protocol", "contracts", "out", "BroadcasterRegistry.sol", "BroadcasterRegistry.json")
+	source := filepath.Join("..", "..", "..", "invisi-core", "contracts", "out", "BroadcasterRegistry.sol", "BroadcasterRegistry.json")
 	b, e := os.ReadFile(source)
 	if e != nil {
 		panic(e)

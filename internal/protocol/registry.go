@@ -12,14 +12,12 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/cryptography"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
+	"github.com/invisi-lab/invisi-rpc/internal/cryptography"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
+	sdkcontracts "github.com/invisi-lab/invisi-sdk-go/protocol/contracts"
 )
 
-// Generated from contracts/out/InvisiAddressRegistry.sol/InvisiAddressRegistry.json.
-//
-//go:embed InvisiAddressRegistry.abi
-var registryABI []byte
+var registryABI = []byte(sdkcontracts.InvisiAddressRegistryMetaData.ABI)
 
 // Generated event-only ABI from contracts/out/BroadcasterRegistry.sol/BroadcasterRegistry.json.
 //

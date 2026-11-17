@@ -4,15 +4,16 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"math/big"
+
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	gethrpc "github.com/ethereum/go-ethereum/rpc"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
 	"github.com/invisi-lab/invisi-sdk-go/protocol/contracts"
-	"math/big"
 )
 
 // ChainStateReader deliberately has no submission or generic RPC method.
@@ -70,7 +71,7 @@ func (a *API) allowedCall(r ChainStateRequest) bool {
 				return true
 			}
 		}
-		ab, _ := contracts.InvisiProtocolMetaData.GetAbi()
+		ab, _ := contracts.InvisiCoreMetaData.GetAbi()
 		m, e := ab.MethodById(r.Data[:4])
 		if e != nil {
 			return false

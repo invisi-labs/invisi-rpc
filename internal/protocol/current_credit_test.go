@@ -2,14 +2,15 @@ package protocol
 
 import (
 	"encoding/json"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/invisi-lab/invisi-protocol-rpc/internal/model"
 	"math/big"
 	"reflect"
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/invisi-lab/invisi-rpc/internal/model"
 )
 
 func TestCurrentCreditEventContract(t *testing.T) {
