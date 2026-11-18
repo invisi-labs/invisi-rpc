@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.6
+
+- Pin the published Go SDK v1.2.6 modules under `github.com/invisi-labs` and publish images under `ghcr.io/invisi-labs`.
+
 ## 1.2.5
 
 - Update the published Go SDK protocol and primitives dependencies to v1.2.5.
