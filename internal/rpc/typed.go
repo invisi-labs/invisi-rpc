@@ -7,7 +7,7 @@ import (
 
 	"github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/invisi-lab/invisi-rpc/internal/model"
+	"github.com/invisi-labs/invisi-rpc/internal/model"
 )
 
 type typedBackend interface {

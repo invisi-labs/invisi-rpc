@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  IMAGE: ghcr.io/invisi-lab/invisi-rpc
+  IMAGE: ghcr.io/invisi-labs/invisi-rpc
   RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:

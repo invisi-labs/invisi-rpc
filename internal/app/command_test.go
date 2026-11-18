@@ -15,11 +15,11 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
-	deployment "github.com/invisi-lab/invisi-rpc"
-	"github.com/invisi-lab/invisi-rpc/internal/config"
-	"github.com/invisi-lab/invisi-rpc/internal/model"
-	"github.com/invisi-lab/invisi-rpc/internal/snapshot"
-	"github.com/invisi-lab/invisi-rpc/internal/storage"
+	deployment "github.com/invisi-labs/invisi-rpc"
+	"github.com/invisi-labs/invisi-rpc/internal/config"
+	"github.com/invisi-labs/invisi-rpc/internal/model"
+	"github.com/invisi-labs/invisi-rpc/internal/snapshot"
+	"github.com/invisi-labs/invisi-rpc/internal/storage"
 )
 
 func cliDeployment() model.Deployment {

@@ -12,8 +12,8 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/invisi-lab/invisi-rpc/internal/model"
-	"github.com/invisi-lab/invisi-rpc/internal/storage"
+	"github.com/invisi-labs/invisi-rpc/internal/model"
+	"github.com/invisi-labs/invisi-rpc/internal/storage"
 )
 
 // Matches compares an already restored deployment with a snapshot without

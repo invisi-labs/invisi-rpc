@@ -9,7 +9,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/invisi-lab/invisi-rpc/internal/model"
+	"github.com/invisi-labs/invisi-rpc/internal/model"
 )
 
 func (d *DeploymentDecoder) decodeBroadcasters(batch *model.Batch, logs []types.Log) (err error) {

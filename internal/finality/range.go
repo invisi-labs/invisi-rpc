@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/invisi-lab/invisi-rpc/internal/model"
+	"github.com/invisi-labs/invisi-rpc/internal/model"
 )
 
 // Finalized performs the full normal finality/anchor checks. A nil block means

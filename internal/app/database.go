@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/invisi-lab/invisi-rpc/internal/config"
-	"github.com/invisi-lab/invisi-rpc/internal/storage"
+	"github.com/invisi-labs/invisi-rpc/internal/config"
+	"github.com/invisi-labs/invisi-rpc/internal/storage"
 )
 
 func OpenDatabase(ctx context.Context, c config.Chain) (storage.Backend, error) {

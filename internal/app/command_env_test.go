@@ -13,8 +13,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	gethrpc "github.com/ethereum/go-ethereum/rpc"
-	"github.com/invisi-lab/invisi-rpc/internal/config"
-	"github.com/invisi-lab/invisi-rpc/internal/model"
+	"github.com/invisi-labs/invisi-rpc/internal/config"
+	"github.com/invisi-labs/invisi-rpc/internal/model"
 )
 
 func TestCommandDefaultDataDirectory(t *testing.T) {

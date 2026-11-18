@@ -16,8 +16,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gofrs/flock"
-	deployment "github.com/invisi-lab/invisi-rpc"
-	"github.com/invisi-lab/invisi-rpc/internal/model"
+	deployment "github.com/invisi-labs/invisi-rpc"
+	"github.com/invisi-labs/invisi-rpc/internal/model"
 )
 
 func validChain(id, path string) Chain {

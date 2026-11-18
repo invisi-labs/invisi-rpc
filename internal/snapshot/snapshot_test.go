@@ -18,9 +18,9 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/invisi-lab/invisi-rpc/internal/model"
-	"github.com/invisi-lab/invisi-rpc/internal/storage"
-	sdkcontracts "github.com/invisi-lab/invisi-sdk-go/protocol/contracts"
+	"github.com/invisi-labs/invisi-rpc/internal/model"
+	"github.com/invisi-labs/invisi-rpc/internal/storage"
+	sdkcontracts "github.com/invisi-labs/invisi-sdk-go/protocol/contracts"
 )
 
 type fakeStore struct {

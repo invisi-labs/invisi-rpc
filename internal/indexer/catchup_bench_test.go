@@ -15,9 +15,9 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/invisi-lab/invisi-rpc/internal/finality"
-	"github.com/invisi-lab/invisi-rpc/internal/model"
-	"github.com/invisi-lab/invisi-rpc/internal/storage"
+	"github.com/invisi-labs/invisi-rpc/internal/finality"
+	"github.com/invisi-labs/invisi-rpc/internal/model"
+	"github.com/invisi-labs/invisi-rpc/internal/storage"
 )
 
 // The fixture models transport latency once per HTTP request, including a JSON-RPC

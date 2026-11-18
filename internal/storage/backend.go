@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/invisi-lab/invisi-rpc/internal/model"
+	"github.com/invisi-labs/invisi-rpc/internal/model"
 )
 
 // Backend is the persistence contract shared by PostgreSQL and SQLite.

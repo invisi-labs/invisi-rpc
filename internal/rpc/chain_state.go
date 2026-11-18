@@ -12,8 +12,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	gethrpc "github.com/ethereum/go-ethereum/rpc"
-	"github.com/invisi-lab/invisi-rpc/internal/model"
-	"github.com/invisi-lab/invisi-sdk-go/protocol/contracts"
+	"github.com/invisi-labs/invisi-rpc/internal/model"
+	"github.com/invisi-labs/invisi-sdk-go/protocol/contracts"
 )
 
 // ChainStateReader deliberately has no submission or generic RPC method.

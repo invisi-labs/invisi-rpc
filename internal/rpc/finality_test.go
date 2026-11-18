@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/invisi-lab/invisi-rpc/internal/finality"
-	"github.com/invisi-lab/invisi-rpc/internal/model"
+	"github.com/invisi-labs/invisi-rpc/internal/finality"
+	"github.com/invisi-labs/invisi-rpc/internal/model"
 )
 
 type fixedFinality struct{ value finality.Snapshot }

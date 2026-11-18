@@ -11,9 +11,9 @@ import (
 	"net/url"
 	"path/filepath"
 
-	deployment "github.com/invisi-lab/invisi-rpc"
-	"github.com/invisi-lab/invisi-rpc/internal/config"
-	"github.com/invisi-lab/invisi-rpc/internal/snapshot"
+	deployment "github.com/invisi-labs/invisi-rpc"
+	"github.com/invisi-labs/invisi-rpc/internal/config"
+	"github.com/invisi-labs/invisi-rpc/internal/snapshot"
 	"github.com/urfave/cli/v3"
 )
 

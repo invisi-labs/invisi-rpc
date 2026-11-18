@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/invisi-lab/invisi-rpc/internal/app"
+	"github.com/invisi-labs/invisi-rpc/internal/app"
 )
 
 func main() {

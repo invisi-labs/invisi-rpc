@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invisi-lab/invisi-rpc/internal/config"
+	"github.com/invisi-labs/invisi-rpc/internal/config"
 	"github.com/urfave/cli/v3"
 )
 

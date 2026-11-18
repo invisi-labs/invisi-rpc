@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invisi-lab/invisi-rpc/internal/model"
+	"github.com/invisi-labs/invisi-rpc/internal/model"
 )
 
 func TestMemoUpdatesPreserveMaximumEnvelopes(t *testing.T) {

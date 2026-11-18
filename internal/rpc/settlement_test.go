@@ -13,10 +13,10 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/invisi-lab/invisi-rpc/internal/model"
-	"github.com/invisi-lab/invisi-rpc/internal/protocol"
-	sdkcontracts "github.com/invisi-lab/invisi-sdk-go/protocol/contracts"
-	"github.com/invisi-lab/invisi-sdk-go/protocol/settlement"
+	"github.com/invisi-labs/invisi-rpc/internal/model"
+	"github.com/invisi-labs/invisi-rpc/internal/protocol"
+	sdkcontracts "github.com/invisi-labs/invisi-sdk-go/protocol/contracts"
+	"github.com/invisi-labs/invisi-sdk-go/protocol/settlement"
 )
 
 type settlementChain struct {

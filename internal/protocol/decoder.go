@@ -13,8 +13,8 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/invisi-lab/invisi-rpc/internal/model"
-	sdkcontracts "github.com/invisi-lab/invisi-sdk-go/protocol/contracts"
+	"github.com/invisi-labs/invisi-rpc/internal/model"
+	sdkcontracts "github.com/invisi-labs/invisi-sdk-go/protocol/contracts"
 )
 
 type Decoder struct{ abi abi.ABI }

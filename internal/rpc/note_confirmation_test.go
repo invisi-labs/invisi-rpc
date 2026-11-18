@@ -12,9 +12,9 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/invisi-lab/invisi-rpc/internal/finality"
-	"github.com/invisi-lab/invisi-rpc/internal/merkle"
-	"github.com/invisi-lab/invisi-rpc/internal/model"
+	"github.com/invisi-labs/invisi-rpc/internal/finality"
+	"github.com/invisi-labs/invisi-rpc/internal/merkle"
+	"github.com/invisi-labs/invisi-rpc/internal/model"
 )
 
 func TestNoteConfirmationSelector(t *testing.T) {

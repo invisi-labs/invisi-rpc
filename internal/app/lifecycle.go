@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/invisi-lab/invisi-rpc/internal/config"
-	"github.com/invisi-lab/invisi-rpc/internal/protocol"
-	apirpc "github.com/invisi-lab/invisi-rpc/internal/rpc"
+	"github.com/invisi-labs/invisi-rpc/internal/config"
+	"github.com/invisi-labs/invisi-rpc/internal/protocol"
+	apirpc "github.com/invisi-labs/invisi-rpc/internal/rpc"
 )
 
 // liveChain owns its client, database, workers and requests. Route acquisition and

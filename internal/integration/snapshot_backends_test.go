@@ -14,9 +14,9 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/invisi-lab/invisi-rpc/internal/model"
-	"github.com/invisi-lab/invisi-rpc/internal/snapshot"
-	"github.com/invisi-lab/invisi-rpc/internal/storage"
+	"github.com/invisi-labs/invisi-rpc/internal/model"
+	"github.com/invisi-labs/invisi-rpc/internal/snapshot"
+	"github.com/invisi-labs/invisi-rpc/internal/storage"
 	"github.com/jackc/pgx/v5"
 )
 

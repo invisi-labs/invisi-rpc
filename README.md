@@ -20,7 +20,7 @@ The current Core bindings are available in the sibling `invisi-sdk-go` checkout 
 ```sh
 go work init . ../invisi-sdk-go/primitives ../invisi-sdk-go/protocol
 go env GOWORK
-go list -m github.com/invisi-lab/invisi-sdk-go/protocol
+go list -m github.com/invisi-labs/invisi-sdk-go/protocol
 ```
 
 If `go.work` already exists, use `go work use` with those paths instead. `go.work` and `go.work.sum` stay locally Git-ignored and are excluded from Docker build contexts. Keep the module requirements at the published version until the corresponding SDK release exists; update them before publishing service binaries/images that use unpublished bindings. A production release must not depend on a sibling checkout.
@@ -99,11 +99,11 @@ SQLite tests run by default. PostgreSQL/EVM tests explicitly skip without their 
 
 ### Container images
 
-Release workflows publish versioned images to `ghcr.io/invisi-lab/invisi-rpc` for `linux/amd64` and `linux/arm64`:
+Release workflows publish versioned images to `ghcr.io/invisi-labs/invisi-rpc` for `linux/amd64` and `linux/arm64`:
 
 ```sh
-docker pull ghcr.io/invisi-lab/invisi-rpc:X.Y.Z
-docker run --rm ghcr.io/invisi-lab/invisi-rpc:X.Y.Z --help
+docker pull ghcr.io/invisi-labs/invisi-rpc:X.Y.Z
+docker run --rm ghcr.io/invisi-labs/invisi-rpc:X.Y.Z --help
 ```
 
 Pushing a stable `vMAJOR.MINOR.PATCH` tag runs Go tests and vet, then builds and publishes the corresponding image tag without the leading `v`. The **Publish container image** workflow also accepts an existing tag through its manual `tag` input. It compiles that tag's source with the workflow's Dockerfile, includes the Apache license, and records the tagged source commit in its OCI revision label and workflow release summary, alongside the image digest. Source commit identity does not constrain snapshot import. Use the digest to pin an exact image in production. Images have their own visibility settings; public images support anonymous pulls even while the source repository is private.
@@ -119,3 +119,7 @@ Use synthetic fixtures and redact logs: never post private keys, credentials, wa
 ## Persistent runtime names
 
 The project, CLI and future release artifacts use `invisi-rpc`. New installations default to `./invisi-rpc`. Existing deployments must explicitly retain their current data path until the release/deployment migration is performed; no data is moved automatically. Select the data path with `--dir` or the service data-directory environment variable.
+
+## GitHub namespace migration
+
+The source uses `github.com/invisi-labs` and the unpublished Go SDK `v1.2.6`. Before that SDK release, validate with an ignored local `go.work`; release builds must resolve the published modules without the workspace. Container workflows target `ghcr.io/invisi-labs`. Verify the target image and digest before deployment; changing source configuration does not publish or copy existing images.

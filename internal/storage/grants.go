@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/invisi-lab/invisi-rpc/internal/model"
+	"github.com/invisi-labs/invisi-rpc/internal/model"
 )
 
 type grantEvent struct {

@@ -16,14 +16,14 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/invisi-lab/invisi-rpc/internal/config"
-	"github.com/invisi-lab/invisi-rpc/internal/finality"
-	"github.com/invisi-lab/invisi-rpc/internal/indexer"
-	"github.com/invisi-lab/invisi-rpc/internal/model"
-	"github.com/invisi-lab/invisi-rpc/internal/protocol"
-	apirpc "github.com/invisi-lab/invisi-rpc/internal/rpc"
-	"github.com/invisi-lab/invisi-rpc/internal/snapshot"
-	"github.com/invisi-lab/invisi-rpc/internal/storage"
+	"github.com/invisi-labs/invisi-rpc/internal/config"
+	"github.com/invisi-labs/invisi-rpc/internal/finality"
+	"github.com/invisi-labs/invisi-rpc/internal/indexer"
+	"github.com/invisi-labs/invisi-rpc/internal/model"
+	"github.com/invisi-labs/invisi-rpc/internal/protocol"
+	apirpc "github.com/invisi-labs/invisi-rpc/internal/rpc"
+	"github.com/invisi-labs/invisi-rpc/internal/snapshot"
+	"github.com/invisi-labs/invisi-rpc/internal/storage"
 )
 
 // CheckAvailability fails clearly when the upstream cannot serve the next needed height.
