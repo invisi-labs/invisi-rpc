@@ -421,3 +421,29 @@ func TestConfigRejectsRemovedDetectionSettings(t *testing.T) {
 		})
 	}
 }
+
+func TestIndexBatchSizeDefaultsAndBounds(t *testing.T) {
+	for _, size := range []int{-1, 0, 1, 32, 64, 128, 129} {
+		t.Run(fmt.Sprint(size), func(t *testing.T) {
+			c := validChain("1", "chain.sqlite")
+			c.IndexBatchSize = size
+			e := c.Validate()
+			if size < 0 || size > 128 {
+				if e == nil {
+					t.Fatal("invalid batch size accepted")
+				}
+				return
+			}
+			if e != nil {
+				t.Fatal(e)
+			}
+			want := size
+			if want == 0 {
+				want = 64
+			}
+			if c.IndexBatchSize != want {
+				t.Fatal("wrong batch size", c.IndexBatchSize)
+			}
+		})
+	}
+}

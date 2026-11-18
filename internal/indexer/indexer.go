@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -30,11 +31,14 @@ type Decoder interface {
 	Decode(model.Block, []types.Log) (model.Batch, error)
 }
 type Indexer struct {
-	Chain      Chain
-	Store      Store
-	Decoder    Decoder
-	Deployment model.Deployment
-	Finality   interface{ Check(context.Context) error }
+	BatchSize       int
+	batchLimit      int
+	batchRetryAfter time.Time
+	Chain           Chain
+	Store           Store
+	Decoder         Decoder
+	Deployment      model.Deployment
+	Finality        interface{ Check(context.Context) error }
 }
 
 func (i *Indexer) Verify(ctx context.Context) error {
@@ -76,9 +80,20 @@ func allowedEmitter(d model.Deployment, address common.Address, number uint64) b
 	return (d.BroadcasterRegistry != nil && address == d.BroadcasterRegistry.Address && number >= d.BroadcasterRegistry.FromBlock) || (address == d.Protocol && number >= d.FromBlock) || (d.Registry != nil && address == d.Registry.Address && number >= d.Registry.FromBlock)
 }
 
-// Step processes at most one canonical block. A false result means the indexer is caught up.
+// Step processes a bounded finalized history range or one canonical head block.
+// A false result means the indexer is caught up.
 func (i *Indexer) Step(ctx context.Context) (bool, error) {
-	if i.Finality != nil {
+	if i.BatchSize > 1 {
+		attempt, e := i.stepRange(ctx)
+		if e != nil || attempt.handled {
+			return attempt.progress, e
+		}
+		return i.step(ctx, attempt.finalityChecked)
+	}
+	return i.step(ctx, false)
+}
+func (i *Indexer) step(ctx context.Context, finalityChecked bool) (bool, error) {
+	if i.Finality != nil && !finalityChecked {
 		if err := i.Finality.Check(ctx); err != nil {
 			return false, err
 		}

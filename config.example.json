@@ -8,6 +8,7 @@
         "path": "chains/31337/protocol.sqlite"
       },
       "pollSeconds": 3,
+      "indexBatchSize": 64,
       "snapshotInterval": "6h",
       "deployment": {
         "chainId": "31337",

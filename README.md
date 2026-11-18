@@ -93,6 +93,8 @@ TEST_DATABASE_URL='postgres://invisi:local-development-only@127.0.0.1:5432/invis
 TEST_CHAIN_RPC_URL=http://127.0.0.1:8545 TEST_DATABASE_URL='postgres://invisi:local-development-only@127.0.0.1:5432/invisi?sslmode=disable' go test ./internal/integration
 ```
 
+Finalized-history catch-up uses bounded batches (default `indexBatchSize: 64`), with the existing sequential path near the head. See [catch-up design, benchmarks and validation](performance.md) for configuration, measured results and limits.
+
 SQLite tests run by default. PostgreSQL/EVM tests explicitly skip without their environment variables. EVM tests require loopback chain 31337 with the contract repository's local deployment; its mock verifiers do not establish real proving correctness.
 
 ### Container images

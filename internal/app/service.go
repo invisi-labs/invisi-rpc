@@ -127,7 +127,7 @@ func prepareChain(ctx context.Context, c config.Chain, reconcile bool) (runtime 
 		return nil, err
 	}
 	finalityReader := &finality.Reader{RPC: client.Client(), Store: store}
-	ix := &indexer.Indexer{Chain: client, Store: store, Decoder: decoder, Deployment: c.Deployment, Finality: finalityReader}
+	ix := &indexer.Indexer{BatchSize: c.IndexBatchSize, Chain: indexer.NewRPCChain(client), Store: store, Decoder: decoder, Deployment: c.Deployment, Finality: finalityReader}
 	checkCtx, done := context.WithTimeout(ctx, 30*time.Second)
 	err = ix.Verify(checkCtx)
 	finalityErr := finalityReader.Check(checkCtx)

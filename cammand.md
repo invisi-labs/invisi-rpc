@@ -139,6 +139,9 @@ invisi-rpc/
 
 Settings live in `config.json`; see [config.example.json](config.example.json). Each entry under `chains` contains its own `chainRpc`, deployment, database and indexing settings. `chain add --snapshot-interval` sets the snapshot policy for that chain; edit individual entries for other policies. Chain settings are reloaded while running; changing `listen` or `maxConcurrentRequests` requires a restart. Indexing follows canonical `latest` immediately and reconciles reorgs. The old `confirmations` config field and CLI flag have been removed; remove this field from existing config files before upgrading. `snapshotInterval` defaults to `6h`; use `0s` to disable exports. `listen` defaults to `127.0.0.1:8080`.
 
+`indexBatchSize` defaults to `64` per chain and accepts `1..128`; `1` selects the original sequential path. During historical catch-up, complete ranges below native `finalized` use batched headers, a ranged log query, sequential event/Merkle/root validation, and one atomic index transaction. Near the head, or without native finalized/batch support, indexing uses the existing per-block path. Upstream log-range errors halve the range; unavailable batch transport temporarily falls back to per-block reads. Invalid headers, logs, roots or finality evidence reject the batch rather than skipping blocks. A failed batch publishes no partial checkpoint. Normal unfinalized reorg recovery and sticky finalized-history conflict handling remain in force. `pollSeconds` controls waiting when idle or retrying errors; successful catch-up steps run immediately. Existing deployment pins and database formats are unchanged.
+
+
 ## Environment variables
 
 Command-line values override environment variables. Initialization settings are saved in `config.json`; `run --listen` or `INVISI_RPC_LISTEN` can override the saved listener without changing that file. An optional positional directory on `init` takes precedence over `--dir` and the environment.

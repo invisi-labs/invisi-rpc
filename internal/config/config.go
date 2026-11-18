@@ -24,6 +24,7 @@ type Database struct {
 	URL    string `json:"url,omitempty"`
 }
 type Chain struct {
+	IndexBatchSize   int              `json:"indexBatchSize,omitempty"`
 	ChainRPC         string           `json:"chainRpc"`
 	Database         Database         `json:"database"`
 	Deployment       model.Deployment `json:"deployment"`
@@ -88,6 +89,12 @@ func (c *Chain) Validate() error {
 	}
 	if c.Database.Driver == "postgres" && c.Database.URL == "" {
 		c.Database.URL = os.Getenv("DATABASE_URL")
+	}
+	if c.IndexBatchSize == 0 {
+		c.IndexBatchSize = 64
+	}
+	if c.IndexBatchSize < 1 || c.IndexBatchSize > 128 {
+		return errors.New("indexBatchSize must be between 1 and 128")
 	}
 	if c.PollSeconds == 0 {
 		c.PollSeconds = 3

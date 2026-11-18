@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -38,10 +39,12 @@ type AnchorStore interface {
 	MarkFinalityConflict(context.Context) error
 }
 type Reader struct {
-	RPC        RPC
-	Store      AnchorStore
-	mu         sync.Mutex
-	conflicted bool
+	RPC           RPC
+	Store         AnchorStore
+	mu            sync.Mutex
+	conflicted    bool
+	rangeFence    atomic.Bool
+	publicationMu sync.Mutex
 }
 
 var ErrFinalityConflict = errors.New("accepted finalized history conflict; operator recovery required")
@@ -126,7 +129,8 @@ func (r *Reader) read(ctx context.Context) (Snapshot, error) {
 		out.Finalized = Head{Status: "unavailable"}
 		return out, fenceErr
 	}
-	if fenced || r.conflicted {
+	if fenced || r.conflicted || r.rangeFence.Load() {
+		r.setRangeFence()
 		invalidate(&out.Finalized)
 		return out, ErrFinalityConflict
 	}
@@ -148,6 +152,7 @@ func (r *Reader) read(ctx context.Context) (Snapshot, error) {
 		if (observedFinalized != nil && observedFinalized.Number == anchor.Number && !same(anchor, observedFinalized)) || !same(anchor, canonical.Block) {
 			invalidate(&out.Finalized)
 			r.conflicted = true
+			r.setRangeFence()
 			if err := r.Store.MarkFinalityConflict(ctx); err != nil {
 				return out, fmt.Errorf("%w: persist fence: %v", ErrFinalityConflict, err)
 			}
