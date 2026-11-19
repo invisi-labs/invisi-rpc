@@ -5,7 +5,7 @@ Standalone Go service for public Invisi data: canonical events, shared Note Tree
 
 ```text
 invisi-rpc (chain authentication / indexing / pagination)
-  └── invisi-sdk-go/protocol v1.2.4
+  └── invisi-sdk-go/protocol v1.3.0
       └── settlement (canonical ABI and operation binding)
 ```
 
@@ -15,7 +15,7 @@ The service does not depend on the wallet SDK. Shared settlement fixtures are ma
 
 ## Local SDK workspace
 
-The current Core bindings are available in the sibling `invisi-sdk-go` checkout before publication. For this development revision, use a local, untracked `go.work` rather than adding machine-specific `replace` directives to `go.mod`:
+The v1.3.0 release uses published Go SDK v1.3.0 modules and includes the unified Core receipt bindings. Standalone builds need no sibling checkout. For local SDK changes, use an untracked `go.work` rather than machine-specific `replace` directives in `go.mod`:
 
 ```sh
 go work init . ../invisi-sdk-go/primitives ../invisi-sdk-go/protocol
@@ -23,11 +23,11 @@ go env GOWORK
 go list -m github.com/invisi-labs/invisi-sdk-go/protocol
 ```
 
-If `go.work` already exists, use `go work use` with those paths instead. `go.work` and `go.work.sum` stay locally Git-ignored and are excluded from Docker build contexts. Keep the module requirements at the published version until the corresponding SDK release exists; update them before publishing service binaries/images that use unpublished bindings. A production release must not depend on a sibling checkout.
+If `go.work` already exists, use `go work use` with those paths instead. `go.work` and `go.work.sum` stay locally Git-ignored and are excluded from Docker build contexts. Keep the committed v1.3.0 dependency requirements when using a workspace for local SDK changes. A production release must not depend on a sibling checkout.
 
 ## Release downloads
 
-Pushing a stable `vX.Y.Z` tag runs tests and publishes the multi-platform GHCR image and GitHub Release binaries from the same tagged source. Manual workflow dispatch accepts an existing tag. Existing Release notes are preserved when assets are uploaded.
+Pushing a stable `vX.Y.Z` tag runs tests and publishes the multi-platform GHCR image and GitHub Release binaries from the same tagged source. Manual workflow dispatch accepts an existing tag. Release notes include the complete matching section from the tagged CHANGELOG.md, followed by image digest and artifact details.
 
 Release archives are named `invisi-rpc_vX.Y.Z_<os>_<arch>`, covering Linux, macOS (`darwin`) and Windows on `amd64` and `arm64`. Linux/macOS use `.tar.gz`; Windows uses `.zip`. Each archive contains the CLI, LICENSE, README, the API reference `api.md` and the CLI reference `cammand.md` when available in the tagged source. Binaries require no Go installation or C runtime. Download `SHA256SUMS-vX.Y.Z.txt` to verify archive checksums before extraction. Configure the deployment catalog and chain RPC as described below; credentials and local configuration are never bundled.
 
