@@ -8,11 +8,15 @@ import (
 	"math/big"
 	"reflect"
 	"strconv"
+	"strings"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/invisi-labs/invisi-rpc/internal/model"
+	sdkprotocol "github.com/invisi-labs/invisi-sdk-go/protocol"
 	"github.com/invisi-labs/invisi-sdk-go/protocol/settlement"
 )
 
@@ -83,6 +87,10 @@ func (a *API) transactionOperationsInBlock(batch *model.Batch, tx *types.Transac
 	if !ok {
 		return nil, errors.New("invalid chain ID")
 	}
+	aggregate, e := matchAggregate(batch, tx.Hash(), tx.Data(), chain, a.Deployment.Protocol, requests)
+	if e != nil {
+		return nil, e
+	}
 	out := make([]settlement.Operation, 0, len(requests))
 	usedOutputs := map[common.Hash]bool{}
 	expectedFunding := map[string]*big.Int{}
@@ -109,60 +117,30 @@ func (a *API) transactionOperationsInBlock(batch *model.Batch, tx *types.Transac
 			o.MemberIndex = &v
 		}
 		add(expectedFees, o.TokenAddress, o.FeeRecipient, statement.FeeAmount)
-		eventName := map[string]string{"shield": "Shield", "createCredit": "CreditCreated", "updateCredit": "CreditUpdated", "revokeCredit": "CreditRevoked", "creditDraw": "CreditDraw"}[r.Method]
-		if r.Method == "transact" {
-			eventName = "Transact"
-			if len(r.Params.Sources) > 1 {
-				eventName = "CrossTreeTransact"
-			}
-			if len(requests) > 1 {
-				eventName = "BatchRequest"
-			} else {
-				decoded, _ := settlement.Decode(tx.Data())
-				if len(decoded.Members) > 0 {
-					eventName = "BatchRequest"
-					v := fmt.Sprint(i)
-					o.MemberIndex = &v
-				}
-			}
-		}
 		var event *model.Event
-		for j := range batch.Events {
-			candidate := &batch.Events[j]
-			if candidate.TransactionHash != tx.Hash() || candidate.Name != eventName {
-				continue
+		if r.Method == "transact" || r.Method == "shield" {
+			id, err := noteID(chain, a.Deployment.Protocol, r)
+			if err != nil {
+				return nil, err
 			}
-			if eventName == "BatchRequest" {
-				var fields map[string]json.RawMessage
-				_ = json.Unmarshal(candidate.Data, &fields)
-				var index string
-				_ = json.Unmarshal(fields["requestIndex"], &index)
-				if index != fmt.Sprint(i) {
-					continue
-				}
+			event, err = authenticatedEvent(batch, tx.Hash(), "NoteOperation", map[string]any{"operationId": id})
+			if err != nil {
+				return nil, err
 			}
-			if event != nil {
-				return nil, errors.New("ambiguous settlement event attribution")
+		} else {
+			var err error
+			event, err = matchCreditEvents(batch, tx.Hash(), r)
+			if err != nil {
+				return nil, err
 			}
-			event = candidate
 		}
 		if event == nil {
-			return nil, errors.New("successful call has no authenticated settlement event")
+			return nil, errors.New("missing canonical settlement event")
 		}
 		o.LogIndex = fmt.Sprint(event.LogIndex)
-		if eventName == "BatchRequest" {
-			var v struct {
-				Capacity      string      `json:"capacity"`
-				StatementHash common.Hash `json:"statementHash"`
-			}
-			if json.Unmarshal(event.Data, &v) != nil {
-				return nil, errors.New("invalid aggregate statement event")
-			}
-			c, _, _, err := settlement.TransactStatement(chain, a.Deployment.Protocol, &r)
-			memberHash, hashErr := settlement.AggregateMemberHash(chain, a.Deployment.Protocol, &r)
-			if err != nil || hashErr != nil || v.Capacity != decimal(uint64(c)) || v.StatementHash != memberHash {
-				return nil, errors.New("aggregate statement event mismatch")
-			}
+		if aggregate {
+			v := fmt.Sprint(i)
+			o.MemberIndex = &v
 		}
 		var commitments, credits [][32]byte
 		switch r.Method {
@@ -182,9 +160,6 @@ func (a *API) transactionOperationsInBlock(batch *model.Batch, tx *types.Transac
 			}
 			commitments = r.Params.NoteCommitments
 			o.WithdrawalAmount = r.Params.WithdrawalAmount.String()
-			if e = matchTransactEvent(*event, r, i, len(requests) > 1 || o.MemberIndex != nil); e != nil {
-				return nil, e
-			}
 		case "shield":
 			if len(r.ShieldOutputs) != len(r.Shield.NoteCommitments) {
 				return nil, errors.New("shield output shape mismatch")
@@ -192,6 +167,11 @@ func (a *API) transactionOperationsInBlock(batch *model.Batch, tx *types.Transac
 			commitments = r.Shield.NoteCommitments
 		case "createCredit":
 			credits = [][32]byte{r.Creation.CreditCommitment}
+			if r.Creation.HasInitialPayment {
+				commitments = [][32]byte{r.Creation.NoteCommitment}
+				o.Funding = append(o.Funding, settlement.FundingReceipt{Payer: r.Creation.Owner, TokenAddress: o.TokenAddress, Amount: r.Creation.TotalAmount.String()})
+				add(expectedFunding, o.TokenAddress, r.Creation.Owner, r.Creation.TotalAmount)
+			}
 		case "updateCredit":
 			credits = [][32]byte{r.Update.CreditCommitment}
 			o.CreditNullifiers = append(o.CreditNullifiers, common.Hash(r.Update.Nullifier))
@@ -228,6 +208,9 @@ func (a *API) transactionOperationsInBlock(batch *model.Batch, tx *types.Transac
 					}
 					if r.Method == "creditDraw" {
 						n.Amount = new(big.Int).Sub(r.Draw.TotalAmount, r.Draw.FeeAmount).String()
+					}
+					if r.Method == "createCredit" && r.Creation.HasInitialPayment {
+						n.Amount = new(big.Int).Sub(r.Creation.TotalAmount, r.Creation.FeeAmount).String()
 					}
 					o.NoteOutputs = append(o.NoteOutputs, n)
 				}
@@ -301,43 +284,195 @@ func (a *API) transactionOperationsInBlock(batch *model.Batch, tx *types.Transac
 	}
 	return out, nil
 }
-func matchTransactEvent(event model.Event, r settlement.Request, index int, aggregate bool) error {
-	var v struct {
-		Token             common.Address `json:"token"`
-		Nullifiers        []common.Hash  `json:"nullifiers"`
-		Commitments       []common.Hash  `json:"noteCommitments"`
-		WithdrawalAddress common.Address `json:"withdrawalAddress"`
-		WithdrawalAmount  string         `json:"withdrawalAmount"`
-		Deadline          string         `json:"deadline"`
-		Payer             common.Address `json:"payer"`
-		DepositAmount     string         `json:"depositAmount"`
-		OutputCount       string         `json:"outputCount"`
-		Capacity          string         `json:"capacity"`
-	}
-	if json.Unmarshal(event.Data, &v) != nil {
-		return errors.New("invalid settlement event")
-	}
-	if v.Token != r.Params.Token || v.WithdrawalAddress != r.Params.WithdrawalAddress || v.WithdrawalAmount != r.Params.WithdrawalAmount.String() || v.Deadline != r.Params.Deadline.String() || len(v.Nullifiers) != len(r.Params.Nullifiers) {
-		return errors.New("calldata and settlement event disagree")
-	}
-	for i, n := range v.Nullifiers {
-		if n != common.Hash(r.Params.Nullifiers[i]) {
-			return errors.New("calldata nullifier differs from event")
-		}
-	}
-	if aggregate {
-		if v.Payer != r.Funding.Payer || v.DepositAmount != r.Funding.Amount.String() || v.OutputCount != fmt.Sprint(len(r.Params.NoteCommitments)) {
-			return errors.New("aggregate member event mismatch")
-		}
+
+// noteID binds calldata to the unified receipt facts, including ciphertexts.
+func noteID(chain *big.Int, core common.Address, r settlement.Request) (common.Hash, error) {
+	p := sdkprotocol.CrossTreeTransactParams{Token: r.Statement().Token, WithdrawalAmount: new(big.Int), Deadline: r.Statement().Deadline, FeeRecipient: r.Statement().FeeRecipient, FeeAmount: r.Statement().FeeAmount}
+	kind := uint8(1)
+	if r.Method == "shield" {
+		kind = 0
+		p.NoteCommitments = r.Shield.NoteCommitments
 	} else {
-		if len(v.Commitments) != len(r.Params.NoteCommitments) {
-			return errors.New("calldata output count differs from event")
+		p = *abi.ConvertType(r.Params, new(sdkprotocol.CrossTreeTransactParams)).(*sdkprotocol.CrossTreeTransactParams)
+	}
+	ds := *abi.ConvertType(r.Deliveries, new([]sdkprotocol.Delivery)).(*[]sdkprotocol.Delivery)
+	return sdkprotocol.NoteOperationID(sdkprotocol.TransactionContext{ChainID: chain, ProtocolAddress: core}, kind, p, ds, sdkprotocol.FundingParams{Payer: r.Funding.Payer, Amount: r.Funding.Amount})
+}
+func authenticatedEvent(batch *model.Batch, tx common.Hash, name string, expected map[string]any) (*model.Event, error) {
+	var found *model.Event
+	wantRaw, e := json.Marshal(receiptJSON(expected))
+	if e != nil {
+		return nil, e
+	}
+	var want map[string]any
+	if e = json.Unmarshal(wantRaw, &want); e != nil {
+		return nil, e
+	}
+	for i := range batch.Events {
+		event := &batch.Events[i]
+		if event.TransactionHash != tx || event.Name != name {
+			continue
 		}
-		for i, c := range v.Commitments {
-			if c != common.Hash(r.Params.NoteCommitments[i]) {
-				return errors.New("calldata commitment differs from event")
+		var got map[string]any
+		if e = json.Unmarshal(event.Data, &got); e != nil {
+			return nil, e
+		}
+		matches := true
+		for key, value := range want {
+			if !reflect.DeepEqual(got[key], value) {
+				matches = false
+				break
 			}
 		}
+		if !matches {
+			continue
+		}
+		if found != nil {
+			return nil, errors.New("ambiguous settlement event attribution")
+		}
+		found = event
 	}
-	return nil
+	if found == nil {
+		return nil, fmt.Errorf("missing or mismatched canonical %s event", name)
+	}
+	return found, nil
+}
+func matchCreditEvents(batch *model.Batch, tx common.Hash, r settlement.Request) (*model.Event, error) {
+	var event *model.Event
+	var err error
+	switch r.Method {
+	case "createCredit":
+		p := r.Creation
+		if len(r.Deliveries) < 2 {
+			return nil, errors.New("invalid creation deliveries")
+		}
+		creationFee, creationRecipient := p.FeeAmount, p.FeeRecipient
+		if p.HasInitialPayment {
+			creationFee = new(big.Int)
+			creationRecipient = common.Address{}
+		}
+		event, err = authenticatedEvent(batch, tx, "CreditCreated", map[string]any{"token": p.Token, "owner": p.Owner, "revocationShard": p.RevocationShard, "revocationSlot": p.RevocationSlot, "creditCommitment": p.CreditCommitment, "deadline": p.Deadline, "feeRecipient": creationRecipient, "feeAmount": creationFee, "deliveries": r.Deliveries[:2]})
+		if err != nil {
+			return nil, err
+		}
+		draws, states := 0, 0
+		for _, v := range batch.Events {
+			if v.TransactionHash == tx {
+				if v.Name == "CreditDraw" {
+					draws++
+				}
+				if v.Name == "CreditStateTransition" {
+					states++
+				}
+			}
+		}
+		if !p.HasInitialPayment {
+			if draws != 0 || states != 0 {
+				return nil, errors.New("unexpected creation payment")
+			}
+			return event, nil
+		}
+		if len(r.Deliveries) != 3 || draws != 1 || states != 0 {
+			return nil, errors.New("invalid initial payment event shape")
+		}
+		_, err = authenticatedEvent(batch, tx, "CreditDraw", map[string]any{"token": p.Token, "noteCommitment": p.NoteCommitment, "totalAmount": p.TotalAmount, "deadline": p.Deadline, "feeRecipient": p.FeeRecipient, "feeAmount": p.FeeAmount, "delivery": r.Deliveries[2]})
+	case "updateCredit":
+		event, err = authenticatedEvent(batch, tx, "CreditUpdated", map[string]any{"owner": r.Update.Owner, "params": r.Update, "deliveries": r.Deliveries})
+	case "creditDraw":
+		p := r.Draw
+		n := len(p.CreditCommitments)
+		if len(r.Deliveries) != 2*n+1 {
+			return nil, errors.New("invalid Credit draw deliveries")
+		}
+		event, err = authenticatedEvent(batch, tx, "CreditDraw", map[string]any{"token": p.Token, "noteCommitment": p.NoteCommitment, "totalAmount": p.TotalAmount, "deadline": p.Deadline, "feeRecipient": p.FeeRecipient, "feeAmount": p.FeeAmount, "delivery": r.Deliveries[2*n]})
+		if err != nil {
+			return nil, err
+		}
+		_, err = authenticatedEvent(batch, tx, "CreditStateTransition", map[string]any{"noteCommitment": p.NoteCommitment, "state": map[string]any{"sources": p.Sources, "payers": p.Payers, "grantRefs": p.GrantRefs, "nullifiers": p.Nullifiers, "creditCommitments": p.CreditCommitments, "recoveryAmounts": p.RecoveryAmounts}, "creditDeliveries": r.Deliveries[:2*n]})
+	case "revokeCredit":
+		p := r.Revocation
+		event, err = authenticatedEvent(batch, tx, "CreditRevoked", map[string]any{"owner": p.Owner, "token": p.Token, "shard": p.Shard, "slot": p.Slot, "feeRecipient": p.FeeRecipient, "feeAmount": p.FeeAmount})
+	}
+	return event, err
+}
+func matchAggregate(batch *model.Batch, tx common.Hash, data []byte, chain *big.Int, core common.Address, requests []settlement.Request) (bool, error) {
+	decoded, err := settlement.Decode(data)
+	if err != nil {
+		return false, err
+	}
+	aggregate := len(decoded.Members) > 0
+	count := 0
+	for _, event := range batch.Events {
+		if event.TransactionHash == tx && event.Name == "TransactAggregated" {
+			count++
+		}
+	}
+	if !aggregate {
+		if count != 0 {
+			return false, errors.New("unexpected aggregate receipt")
+		}
+		return false, nil
+	}
+	ids := []common.Hash{}
+	for _, r := range requests {
+		id, e := noteID(chain, core, r)
+		if e != nil {
+			return false, e
+		}
+		ids = append(ids, id)
+	}
+	if count != 1 {
+		return false, errors.New("missing or duplicate aggregate receipt")
+	}
+	_, err = authenticatedEvent(batch, tx, "TransactAggregated", map[string]any{"proofHash": crypto.Keccak256Hash(decoded.Proof), "operationIds": ids})
+	return true, err
+}
+
+// receiptJSON keeps EVM integers lossless for JavaScript consumers and bytes in hex.
+func receiptJSON(value any) any {
+	switch v := value.(type) {
+	case uint64:
+		return strconv.FormatUint(v, 10)
+	case *big.Int:
+		return v.String()
+	case common.Address:
+		return v.Hex()
+	case common.Hash:
+		return v.Hex()
+	case [32]byte:
+		return common.Hash(v).Hex()
+	case []byte:
+		return hexutil.Encode(v)
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for k, item := range v {
+			out[k] = receiptJSON(item)
+		}
+		return out
+	}
+	v := reflect.ValueOf(value)
+	if !v.IsValid() {
+		return nil
+	}
+	switch v.Kind() {
+	case reflect.Slice, reflect.Array:
+		out := make([]any, v.Len())
+		for i := range out {
+			out[i] = receiptJSON(v.Index(i).Interface())
+		}
+		return out
+	case reflect.Struct:
+		out := make(map[string]any, v.NumField())
+		for i := 0; i < v.NumField(); i++ {
+			field := v.Type().Field(i)
+			if !field.IsExported() {
+				continue
+			}
+			name := field.Name
+			name = strings.ToLower(name[:1]) + name[1:]
+			out[name] = receiptJSON(v.Field(i).Interface())
+		}
+		return out
+	}
+	return value
 }

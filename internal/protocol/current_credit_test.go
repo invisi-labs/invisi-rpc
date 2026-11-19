@@ -25,7 +25,7 @@ func TestCurrentCreditEventContract(t *testing.T) {
 		}
 	}
 	sort.Strings(names)
-	want := []string{"CreditCreated", "CreditDraw", "CreditRevoked", "CreditUpdated"}
+	want := []string{"CreditCreated", "CreditDraw", "CreditRevoked", "CreditStateTransition", "CreditUpdated"}
 	if !reflect.DeepEqual(names, want) {
 		t.Fatalf("Credit event set: got %v, want %v", names, want)
 	}
@@ -89,18 +89,25 @@ func TestCreditDrawAndUpdateHaveDistinctStateAndNoteProjections(t *testing.T) {
 	token := common.HexToAddress("2")
 	p := currentDrawTuple{Token: token, Sources: []sourceTuple{{big.NewInt(1), [32]byte{9}}}, Payers: []payerTuple{{common.HexToAddress("1"), big.NewInt(3)}, {common.HexToAddress("2"), big.NewInt(4)}}, GrantRefs: []refTuple{{big.NewInt(0), 1, 0}, {big.NewInt(1), 1, 0}}, Nullifiers: [][32]byte{{1}, {2}}, CreditCommitments: [][32]byte{{3}, {4}}, RecoveryAmounts: [][32]byte{{5}, {6}}, NoteCommitment: [32]byte{7}, TotalAmount: big.NewInt(7), Deadline: big.NewInt(99), FeeRecipient: common.HexToAddress("44"), FeeAmount: big.NewInt(1)}
 	ins := log("CommitmentsInserted", 1, tx, []any{big.NewInt(1)}, uint32(0), [][32]byte{{3}, {4}, {7}})
-	draw := log("CreditDraw", 2, tx, []any{big.NewInt(1)}, p, []uint32{0, 1, 2}, []delivery{{[]byte{1}, nil}, {[]byte{2}, nil}, {[]byte{3}, nil}, {[]byte{4}, nil}, {[]byte{5}, nil}})
-	b, e := d.Decode(model.Block{Number: 10, Timestamp: 100}, []types.Log{ins, draw})
+	stateTuple := struct {
+		Sources                                        []sourceTuple
+		Payers                                         []payerTuple
+		GrantRefs                                      []refTuple
+		Nullifiers, CreditCommitments, RecoveryAmounts [][32]byte
+	}{p.Sources, p.Payers, p.GrantRefs, p.Nullifiers, p.CreditCommitments, p.RecoveryAmounts}
+	draw := log("CreditDraw", 2, tx, []any{p.Token, big.NewInt(1), p.NoteCommitment}, uint32(2), p.TotalAmount, p.Deadline, p.FeeRecipient, p.FeeAmount, delivery{[]byte{5}, nil})
+	state := log("CreditStateTransition", 3, tx, []any{big.NewInt(1), p.NoteCommitment}, stateTuple, []uint32{0, 1}, []delivery{{[]byte{1}, nil}, {[]byte{2}, nil}, {[]byte{3}, nil}, {[]byte{4}, nil}})
+	b, e := d.Decode(model.Block{Number: 10, Timestamp: 100}, []types.Log{ins, draw, state})
 	if e != nil {
 		t.Fatal(e)
 	}
-	assertCreditFee(t, b.Events[1].Data, true, "1")
+	assertCreditFee(t, b.Events[1].Data, false, "1")
 	if len(b.Outputs) != 1 || b.Outputs[0].Commitment != p.NoteCommitment || len(b.CreditStates) != 2 || len(b.CreditStates[1].Deliveries) != 2 || len(b.CreditNullifiers) != 2 || len(b.Nullifiers) != 0 {
 		t.Fatalf("incorrect postpaid draw %+v", b)
 	}
-	bad := log("CreditDraw", 2, tx, []any{big.NewInt(1)}, p, []uint32{0, 1}, []delivery{{}, {}, {}, {}, {}})
-	if _, e = d.Decode(model.Block{}, []types.Log{ins, bad}); e == nil {
-		t.Fatal("accepted missing ordinary Note position")
+	bad := log("CreditStateTransition", 3, tx, []any{big.NewInt(1), p.NoteCommitment}, stateTuple, []uint32{0}, []delivery{{}, {}, {}, {}})
+	if _, e = d.Decode(model.Block{}, []types.Log{ins, draw, bad}); e == nil {
+		t.Fatal("accepted missing credit state position")
 	}
 	up := updateTuple{Token: token, Owner: common.HexToAddress("1"), Source: sourceTuple{big.NewInt(1), [32]byte{9}}, Nullifier: [32]byte{8}, CreditCommitment: [32]byte{9}, RevocationShard: 1, Deadline: big.NewInt(99), FeeRecipient: common.HexToAddress("44"), FeeAmount: big.NewInt(2)}
 	ins = log("CommitmentsInserted", 1, tx, []any{big.NewInt(1)}, uint32(3), [][32]byte{{9}})

@@ -360,7 +360,7 @@ func TestPinnedABIHashMatchesSource(t *testing.T) {
 	}
 	sum := sha256.Sum256(append(append(b, registry...), broadcaster...))
 	if hex.EncodeToString(sum[:]) != ABIHash {
-		t.Fatal("snapshot ABI hash differs from pinned decoder ABI")
+		t.Fatalf("snapshot ABI hash differs from pinned decoder ABI: want %s", hex.EncodeToString(sum[:]))
 	}
 }
 func TestSQLiteCorruptFooterRollsBackAllBlocks(t *testing.T) {
@@ -708,15 +708,13 @@ func TestBroadcasterSnapshotRoundTripAndPins(t *testing.T) {
 	}
 }
 
-func TestMetadataOnlyCoreRenameKeepsExistingSnapshotHeaders(t *testing.T) {
+func TestUnifiedSnapshotRejectsPreUnifiedABI(t *testing.T) {
 	dep, _ := fixture()
 	h := header(dep)
-	h.ABIHash = metadataEquivalentABIHash
-	if err := checkHeader(h, &dep); err != nil {
-		t.Fatal(err)
-	}
-	h.ABIHash = strings.Repeat("f", 64)
-	if err := checkHeader(h, &dep); err == nil {
-		t.Fatal("unreviewed ABI fingerprint accepted")
+	for _, old := range []string{"89a06cf82a788866b987ea2166661e9ef80f89ecf92adc952cdcf711d94988e1", "b0eb65498a50753ab8e0e72c415fbed1afc08011e689e9d946d19f1b85d1b14e"} {
+		h.ABIHash = old
+		if err := checkHeader(h, &dep); err == nil {
+			t.Fatal("accepted incompatible pre-unified snapshot")
+		}
 	}
 }

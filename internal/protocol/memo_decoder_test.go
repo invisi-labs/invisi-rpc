@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/invisi-labs/invisi-rpc/internal/model"
 )
 
@@ -22,17 +21,16 @@ func memoSegment(size int, marker byte) []byte {
 	return append(segment, clue...)
 }
 
-func TestMemoBatchOutputsMixedLengths(t *testing.T) {
-	d, log := fixture(t)
+func TestMemoNoteOutputsMixedLengths(t *testing.T) {
 	sizes := []int{160, 177, 416}
 	var packed []byte
-	tokens := []common.Address{{1}, {2}, {3}}
+	token := common.HexToAddress("11")
 	commitments := [][32]byte{{1}, {2}, {3}}
 	for i, size := range sizes {
 		packed = append(packed, memoSegment(size, byte(i+10))...)
 	}
-	l := log("BatchOutputs", 1, common.Hash{}, []any{big.NewInt(2)}, uint32(91), big.NewInt(5), tokens, commitments, packed)
-	b, err := d.Decode(model.Block{}, []types.Log{l})
+	d, logs := noteFixture(t, big.NewInt(2), 91, commitments, packed)
+	b, err := d.Decode(model.Block{}, logs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +38,7 @@ func TestMemoBatchOutputsMixedLengths(t *testing.T) {
 		t.Fatalf("got %d outputs", len(b.Outputs))
 	}
 	for i, output := range b.Outputs {
-		if len(output.Ciphertext) != sizes[i] || output.Ciphertext[0] != 2 || output.Ciphertext[1] != byte(i+10) || len(output.Clue) != 68 || output.Clue[0] != byte(i+11) || output.Token != tokens[i] || output.Commitment != commitments[i] || output.LeafIndex != uint32(91+i) {
+		if len(output.Ciphertext) != sizes[i] || output.Ciphertext[0] != 2 || output.Ciphertext[1] != byte(i+10) || len(output.Clue) != 68 || output.Clue[0] != byte(i+11) || output.Token != token || output.Commitment != commitments[i] || output.LeafIndex != uint32(91+i) {
 			t.Fatalf("output %d lost its envelope, clue or position", i)
 		}
 	}
@@ -50,8 +48,7 @@ func TestMemoBatchOutputsMixedLengths(t *testing.T) {
 	}
 }
 
-func TestMemoBatchOutputsRejectMalformedFraming(t *testing.T) {
-	d, log := fixture(t)
+func TestMemoNoteOutputsRejectMalformedFraming(t *testing.T) {
 	valid := memoSegment(160, 9)
 	wrongPrecision := append([]byte(nil), valid...)
 	wrongPrecision[2+160+64] = 8
@@ -72,8 +69,8 @@ func TestMemoBatchOutputsRejectMalformedFraming(t *testing.T) {
 			if name == "missing output" {
 				count = 2
 			}
-			l := log("BatchOutputs", 1, common.Hash{}, []any{big.NewInt(2)}, uint32(91), big.NewInt(0), make([]common.Address, count), make([][32]byte, count), packed)
-			if _, err := d.Decode(model.Block{}, []types.Log{l}); err == nil {
+			d, logs := noteFixture(t, big.NewInt(2), 91, make([][32]byte, count), packed)
+			if _, err := d.Decode(model.Block{}, logs); err == nil {
 				t.Fatal("accepted malformed packed deliveries")
 			}
 		})
@@ -87,7 +84,6 @@ func TestUnifiedProtocolVersion(t *testing.T) {
 }
 
 func TestOpaqueCiphertextBatchIgnoresCodecVersions(t *testing.T) {
-	d, log := fixture(t)
 	var packed []byte
 	sizes := []int{1, 161, 502, 754, 4096}
 	for _, size := range sizes {
@@ -95,8 +91,8 @@ func TestOpaqueCiphertextBatchIgnoresCodecVersions(t *testing.T) {
 		segment[2] = 0x7f
 		packed = append(packed, segment...)
 	}
-	l := log("BatchOutputs", 1, common.Hash{}, []any{big.NewInt(2)}, uint32(91), big.NewInt(0), make([]common.Address, len(sizes)), make([][32]byte, len(sizes)), packed)
-	b, err := d.Decode(model.Block{}, []types.Log{l})
+	d, logs := noteFixture(t, big.NewInt(2), 91, make([][32]byte, len(sizes)), packed)
+	b, err := d.Decode(model.Block{}, logs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,20 +107,19 @@ func TestOpaqueCiphertextBatchIgnoresCodecVersions(t *testing.T) {
 	for _, size := range []int{0, 4097} {
 		segment := make([]byte, 2+size+68)
 		binary.BigEndian.PutUint16(segment, uint16(size))
-		l = log("BatchOutputs", 1, common.Hash{}, []any{big.NewInt(2)}, uint32(91), big.NewInt(0), make([]common.Address, 1), make([][32]byte, 1), segment)
-		if _, err := d.Decode(model.Block{}, []types.Log{l}); err == nil {
+		d, logs = noteFixture(t, big.NewInt(2), 91, make([][32]byte, 1), segment)
+		if _, err := d.Decode(model.Block{}, logs); err == nil {
 			t.Fatal("accepted invalid resource size")
 		}
 	}
 }
 
-func TestBatchOutputsWithoutEnvelopePreservePositions(t *testing.T) {
-	d, log := fixture(t)
+func TestNoteOutputsWithoutEnvelopePreservePositions(t *testing.T) {
 	packed := append([]byte{0, 0}, memoSegment(160, 9)...)
 	packed = append(packed, 0, 0)
 	commitments := [][32]byte{{1}, {2}, {3}}
-	l := log("BatchOutputs", 1, common.Hash{}, []any{big.NewInt(2)}, uint32(91), big.NewInt(0), make([]common.Address, 3), commitments, packed)
-	b, err := d.Decode(model.Block{}, []types.Log{l})
+	d, logs := noteFixture(t, big.NewInt(2), 91, commitments, packed)
+	b, err := d.Decode(model.Block{}, logs)
 	if err != nil {
 		t.Fatal(err)
 	}

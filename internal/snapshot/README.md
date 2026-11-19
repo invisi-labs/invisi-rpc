@@ -54,7 +54,7 @@ Format 2 includes each canonical block timestamp and binds each event/output can
 
 Source revisions are release provenance, not snapshot compatibility fields. Container releases record the tagged source commit in the OCI `org.opencontainers.image.revision` label and publish it with the image digest. Snapshot validation is independent of source commit identity.
 
-Format 2 separates ordinary `outputs` from `creditStates`, with both encrypted state deliveries retained per Credit leaf, and records `creditNullifiers` separately from ordinary Note nullifiers. Credit grant history is rebuilt from canonical creation/revocation events during import. The source profile is `invisi-protocol-v1-postpaid-credit-typed`; earlier snapshots are rejected without writing their normalized records. Public API v1 is independent of these internal format identifiers. Preserve any local experimental data before selecting a separate empty database for an incompatible format; never relabel normalized records.
+Format 2 separates ordinary `outputs` from `creditStates`, with both encrypted state deliveries retained per Credit leaf, and records `creditNullifiers` separately from ordinary Note nullifiers. Credit grant history is rebuilt from canonical creation/revocation events during import. The source profile is `invisi-core-v1-unified-receipts`; earlier snapshots are rejected without writing their normalized records. Public API v1 is independent of these internal format identifiers. Preserve any local experimental data before selecting a separate empty database for an incompatible format; never relabel normalized records.
 
 ## Contributing
 

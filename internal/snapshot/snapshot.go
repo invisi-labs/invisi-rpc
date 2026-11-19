@@ -23,11 +23,9 @@ import (
 )
 
 const (
-	FormatVersion = 2
-	SourceProfile = "invisi-protocol-v1-postpaid-credit-typed"
-	ABIHash       = "89a06cf82a788866b987ea2166661e9ef80f89ecf92adc952cdcf711d94988e1"
-	// Source-only type names changed; this reviewed fingerprint has identical event layouts.
-	metadataEquivalentABIHash         = "b0eb65498a50753ab8e0e72c415fbed1afc08011e689e9d946d19f1b85d1b14e"
+	FormatVersion                     = 3
+	SourceProfile                     = "invisi-core-v1-unified-receipts"
+	ABIHash                           = "1c9bb909c286ebe03d6f4f138a1c74d5b7f0101211f78177aaf163f78b472189"
 	DefaultMaxDecompressedBytes int64 = 8 << 30
 	MaxRecordBytes                    = 64 << 20
 )
@@ -59,7 +57,7 @@ func header(dep model.Deployment) Header {
 	return Header{Version: FormatVersion, SourceProfile: SourceProfile, ABIHash: ABIHash, Deployment: dep}
 }
 func checkHeader(h Header, dep *model.Deployment) error {
-	if h.Version != FormatVersion || h.SourceProfile != SourceProfile || (h.ABIHash != ABIHash && h.ABIHash != metadataEquivalentABIHash) {
+	if h.Version != FormatVersion || h.SourceProfile != SourceProfile || h.ABIHash != ABIHash {
 		return errors.New("unsupported snapshot version or source profile")
 	}
 	if h.Checkpoint != nil {

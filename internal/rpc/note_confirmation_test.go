@@ -195,7 +195,7 @@ func TestNoteConfirmationFinalityChanges(t *testing.T) {
 func TestNoteConfirmationWireFixture(t *testing.T) {
 	a, s, _ := confirmedFixture(t)
 	a.Deployment.RuntimeCodeHash = common.HexToHash("abcd")
-	s.lookup.Output.Kind = "Shield"
+	s.lookup.Output.Kind = "NoteOutputs"
 	result, err := a.confirmNote(context.Background(), s.lookup.Output.Commitment, "finalized")
 	if err != nil {
 		t.Fatal(err)

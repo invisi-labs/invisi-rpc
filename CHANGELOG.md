@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.0
+
+- Consume Go SDK v1.3.0 and the redeployed Core unified receipt events.
+- Authenticate Note operation IDs, state transitions, ordered aggregate inclusion and insertion subranges through the SDK receipt decoder.
+- Index Credit creation with an optional initial merchant payment, preserving gross funding, fees, net ordinary Note amounts and separate owner/spender Credit deliveries.
+- Keep canonical receipt verification, rollback and checkpoint handling for all new outputs and nullifiers.
+- Use snapshot format 3 with the current Core ABI fingerprint; pre-unified snapshots are incompatible.
+
 ## 1.2.6
 
 - Pin the published Go SDK v1.2.6 modules under `github.com/invisi-labs` and publish images under `ghcr.io/invisi-labs`.

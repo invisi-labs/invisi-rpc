@@ -18,6 +18,7 @@
   "status": "confirmed",
   "reason": null,
   "output": {
+    "operationId": "0x0000000000000000000000000000000000000000000000000000000000000000",
     "block": {
       "timestamp": 123,
       "number": 10,
@@ -32,7 +33,7 @@
     "clue": "0x",
     "transactionHash": "0x0000000000000000000000000000000000000000000000000000000000000003",
     "logIndex": 0,
-    "kind": "Shield"
+    "kind": "NoteOutputs"
   },
   "membership": {
     "anchor": {

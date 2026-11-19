@@ -1,7 +1,6 @@
 package protocol
 
 import (
-	"encoding/json"
 	"math/big"
 	"testing"
 
@@ -10,6 +9,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/invisi-labs/invisi-rpc/internal/model"
 )
+
+type delivery struct{ Ciphertext, Clue []byte }
 
 func fixture(t *testing.T) (*Decoder, func(string, uint, common.Hash, []any, ...any) types.Log) {
 	t.Helper()
@@ -35,75 +36,51 @@ func fixture(t *testing.T) (*Decoder, func(string, uint, common.Hash, []any, ...
 		return types.Log{Topics: topics, Data: data, Index: index, TxHash: tx}
 	}
 }
-func TestShieldCorrelationAndInsertionBoundaries(t *testing.T) {
-	d, log := fixture(t)
-	tx := common.HexToHash("01")
-	c := [32]byte{1}
-	token := common.HexToAddress("01")
-	deliveryTuple := []delivery{{[]byte{1, 2}, []byte{3}}}
-	ins := log("CommitmentsInserted", 1, tx, []any{big.NewInt(7)}, uint32(12), [][32]byte{c})
-	shield := log("Shield", 2, tx, []any{token, common.Address{}, big.NewInt(7)}, big.NewInt(1), uint32(12), deliveryTuple, big.NewInt(9))
-	b, err := d.Decode(model.Block{}, []types.Log{shield, ins})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(b.Insertions) != 1 || len(b.Outputs) != 1 || b.Outputs[0].Commitment != c || b.Outputs[0].LeafIndex != 12 {
-		t.Fatalf("unexpected decoded batch: %+v", b)
-	}
-	shield.TxHash = common.HexToHash("02")
-	if _, err = d.Decode(model.Block{}, []types.Log{ins, shield}); err == nil {
-		t.Fatal("accepted insertion from different transaction")
-	}
-}
-func TestBatchOutputsPackedDeliveries(t *testing.T) {
-	d, log := fixture(t)
-	tx := common.Hash{}
-	p := append(memoSegment(160, 6), memoSegment(416, 7)...)
-	p[2+160] = 9
-	l := log("BatchOutputs", 1, tx, []any{big.NewInt(1)}, uint32(2), big.NewInt(0), []common.Address{{1}, {2}}, [][32]byte{{1}, {2}}, p)
-	b, err := d.Decode(model.Block{}, []types.Log{l})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(b.Insertions) != 1 || len(b.Outputs) != 2 || len(b.Outputs[0].Ciphertext) != 160 || b.Outputs[0].Clue[0] != 9 || b.Outputs[1].Ciphertext[1] != 7 {
-		t.Fatal("incorrect packed delivery split")
-	}
-	var data map[string]json.RawMessage
-	if err := json.Unmarshal(b.Events[0].Data, &data); err != nil {
-		t.Fatal(err)
-	}
-	if len(data["noteCommitments"]) == 0 || len(data["commitments"]) != 0 {
-		t.Fatal("BatchOutputs must name ordinary Note commitments explicitly")
-	}
-	bad := log("BatchOutputs", 1, tx, []any{big.NewInt(1)}, uint32(2), big.NewInt(0), []common.Address{{1}}, [][32]byte{{1}, {2}}, p)
-	if _, err = d.Decode(model.Block{}, []types.Log{bad}); err == nil {
-		t.Fatal("accepted inconsistent lengths")
-	}
-}
 
 type sourceTuple struct {
 	TreeId     *big.Int
 	MerkleRoot [32]byte
 }
 
-func TestTransactAndBatchRequestNullifiers(t *testing.T) {
+// noteFixture emits one unified Shield operation with a single insertion range.
+func noteFixture(t *testing.T, treeID *big.Int, start uint32, commitments [][32]byte, packed []byte) (*Decoder, []types.Log) {
+	t.Helper()
 	d, log := fixture(t)
-	tx := common.Hash{}
-	ins := log("CommitmentsInserted", 1, tx, []any{big.NewInt(2)}, uint32(6), [][32]byte{{3}})
-	tr := log("Transact", 2, tx, []any{big.NewInt(1), big.NewInt(2)}, common.Address{}, [][32]byte{{4}}, [][32]byte{{3}}, []uint32{6}, []delivery{{[]byte{1}, nil}}, common.Address{}, big.NewInt(0), big.NewInt(9))
-	b, err := d.Decode(model.Block{}, []types.Log{ins, tr})
+	id := common.HexToHash("1234")
+	tx := common.HexToHash("55")
+	token := common.HexToAddress("11")
+	return d, []types.Log{
+		log("NoteOperation", 0, tx, []any{id, token}, uint8(0), big.NewInt(int64(len(commitments))), big.NewInt(99), common.Address{}, new(big.Int)),
+		log("PublicDeposit", 1, tx, []any{id, token, common.HexToAddress("22")}, big.NewInt(5)),
+		log("CommitmentsInserted", 2, tx, []any{treeID}, start, commitments),
+		log("NoteOutputs", 3, tx, []any{id, treeID}, start, packed),
+	}
+}
+func TestUnifiedCorrelationAndInsertionBoundaries(t *testing.T) {
+	d, logs := noteFixture(t, big.NewInt(7), 12, [][32]byte{{1}}, memoSegment(160, 9))
+	b, err := d.Decode(model.Block{}, logs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(b.Outputs) != 1 || len(b.Insertions) != 1 || len(b.Nullifiers) != 1 {
-		t.Fatalf("incorrect transact %+v", b)
+	if len(b.Insertions) != 1 || len(b.Outputs) != 1 || b.Outputs[0].LeafIndex != 12 || b.Outputs[0].OperationID != common.HexToHash("1234") {
+		t.Fatalf("projection: %+v", b)
 	}
-	req := log("BatchRequest", 3, tx, []any{big.NewInt(0)}, common.Address{}, big.NewInt(2), []sourceTuple{{big.NewInt(1), [32]byte{1}}}, [][32]byte{{5}}, big.NewInt(0), common.Address{}, big.NewInt(0), common.Address{}, big.NewInt(0), big.NewInt(9), [32]byte{6})
-	b, err = d.Decode(model.Block{}, []types.Log{req})
-	if err != nil {
-		t.Fatal(err)
+	for _, mutate := range []func([]types.Log){
+		func(ls []types.Log) { ls[3].TxHash = common.HexToHash("77") },
+		func(ls []types.Log) {
+			ls[3].Topics = append([]common.Hash(nil), ls[3].Topics...)
+			ls[3].Topics[1] = common.HexToHash("77")
+		},
+		func(ls []types.Log) { ls[3].Removed = true },
+	} {
+		copyLogs := append([]types.Log(nil), logs...)
+		mutate(copyLogs)
+		if _, err = d.Decode(model.Block{}, copyLogs); err == nil {
+			t.Fatal("accepted broken receipt correlation")
+		}
 	}
-	if len(b.Nullifiers) != 1 || len(b.Outputs) != 0 || len(b.Events) != 1 {
-		t.Fatalf("incorrect batch request %+v", b)
+	d, logs = noteFixture(t, big.NewInt(1), 65535, [][32]byte{{1}, {2}}, append(memoSegment(160, 1), memoSegment(160, 2)...))
+	if _, err = d.Decode(model.Block{}, logs); err == nil {
+		t.Fatal("accepted overflowing insertion range")
 	}
 }

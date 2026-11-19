@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	sdkprotocol "github.com/invisi-labs/invisi-sdk-go/protocol"
+	"math/big"
 	"sort"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -33,7 +35,12 @@ type DeploymentDecoder struct {
 }
 
 func NewDeploymentDecoder(deployment model.Deployment) (*DeploymentDecoder, error) {
-	p, err := NewDecoder()
+	chain, ok := new(big.Int).SetString(deployment.ChainID, 10)
+	var context []sdkprotocol.TransactionContext
+	if ok {
+		context = append(context, sdkprotocol.TransactionContext{ChainID: chain, ProtocolAddress: deployment.Protocol})
+	}
+	p, err := NewDecoder(context...)
 	if err != nil {
 		return nil, err
 	}

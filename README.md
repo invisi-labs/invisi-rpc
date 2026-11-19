@@ -122,4 +122,4 @@ The project, CLI and future release artifacts use `invisi-rpc`. New installation
 
 ## GitHub namespace migration
 
-The source uses `github.com/invisi-labs` and the unpublished Go SDK `v1.2.6`. Before that SDK release, validate with an ignored local `go.work`; release builds must resolve the published modules without the workspace. Container workflows target `ghcr.io/invisi-labs`. Verify the target image and digest before deployment; changing source configuration does not publish or copy existing images.
+The source uses `github.com/invisi-labs` and the unpublished Go SDK `v1.3.0`. Before that SDK release, validate with an ignored local `go.work`; release builds must resolve the published modules without the workspace. Container workflows target `ghcr.io/invisi-labs`. Verify the target image and digest before deployment; changing source configuration does not publish or copy existing images.

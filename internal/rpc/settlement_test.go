@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/invisi-labs/invisi-rpc/internal/model"
 	"github.com/invisi-labs/invisi-rpc/internal/protocol"
+	sdkprotocol "github.com/invisi-labs/invisi-sdk-go/protocol"
 	sdkcontracts "github.com/invisi-labs/invisi-sdk-go/protocol/contracts"
 	"github.com/invisi-labs/invisi-sdk-go/protocol/settlement"
 )
@@ -87,9 +88,8 @@ func settlementFixture(t *testing.T) (*API, *settlementChain, *transactionBacken
 		logs = append(logs, types.Log{Address: address, Topics: append([]common.Hash{event.ID}, topics...), Data: encoded, BlockNumber: 10, BlockHash: block.Hash(), TxHash: tx.Hash(), Index: uint(len(logs))})
 	}
 	emit("CommitmentsInserted", []common.Hash{common.BigToHash(big.NewInt(1))}, uint32(0), r.Params.NoteCommitments)
-	emit("PublicDeposit", []common.Hash{common.BytesToHash(r.Params.Token[:]), common.BytesToHash(r.Funding.Payer[:])}, r.Funding.Amount, crypto.Keccak256Hash(r.Proof))
 	emit("BroadcasterFee", []common.Hash{common.BytesToHash(r.Params.Token[:]), common.BytesToHash(r.Params.FeeRecipient[:])}, r.Params.FeeAmount)
-	emit("CrossTreeTransact", []common.Hash{common.BigToHash(big.NewInt(1))}, r.Params.Token, r.Params.Sources, r.Params.Nullifiers, r.Params.NoteCommitments, []uint32{0}, r.Deliveries, r.Params.WithdrawalAddress, r.Params.WithdrawalAmount, r.Params.Deadline)
+	emitUnifiedNote(t, emit, *r, address, 0)
 	decoder, e := protocol.NewDecoder()
 	if e != nil {
 		t.Fatal(e)
@@ -135,7 +135,7 @@ func TestSettlementCanonicalFactsAndFunding(t *testing.T) {
 	if result := call(t, h, "invisi_getSettlementOperations", []any{map[string]any{"limit": 1}}, ""); result.Error != nil {
 		t.Fatal(result.Error)
 	}
-	chain.receipt.Logs = chain.receipt.Logs[:4]
+	chain.receipt.Logs = chain.receipt.Logs[:len(chain.receipt.Logs)-1]
 	result, e := a.GetTransactionOperations(ctx, chain.tx.Hash())
 	if e != nil {
 		t.Fatal(e)
@@ -235,31 +235,20 @@ func TestSettlementAggregateNativeMembersAndPooledPull(t *testing.T) {
 		logs = append(logs, types.Log{Address: address, Topics: append([]common.Hash{event.ID}, topics...), Data: encoded, BlockNumber: 10, BlockHash: chain.block.Hash(), TxHash: chain.tx.Hash(), Index: uint(len(logs))})
 	}
 	commitments := [][32]byte{}
-	tokens := []common.Address{}
-	packed := []byte{}
 	total := new(big.Int)
-	for i, r := range members {
-		c, _, _, e := settlement.TransactStatement(big.NewInt(56), address, &r)
-		if e != nil {
-			t.Fatal(e)
-		}
-		h, e := settlement.AggregateMemberHash(big.NewInt(56), address, &r)
-		if e != nil {
-			t.Fatal(e)
-		}
-		emit("BatchRequest", []common.Hash{common.BigToHash(big.NewInt(int64(i)))}, r.Params.Token, big.NewInt(int64(c)), r.Params.Sources, r.Params.Nullifiers, big.NewInt(int64(len(r.Params.NoteCommitments))), r.Funding.Payer, r.Funding.Amount, r.Params.WithdrawalAddress, r.Params.WithdrawalAmount, r.Params.Deadline, h)
-		emit("BroadcasterFee", []common.Hash{common.BytesToHash(r.Params.Token[:]), common.BytesToHash(r.Params.FeeRecipient[:])}, r.Params.FeeAmount)
+	ids := []common.Hash{}
+	for _, r := range members {
 		commitments = append(commitments, r.Params.NoteCommitments...)
-		for _, d := range r.Deliveries {
-			tokens = append(tokens, r.Params.Token)
-			packed = append(packed, byte(len(d.Ciphertext)>>8), byte(len(d.Ciphertext)))
-			packed = append(packed, d.Ciphertext...)
-			packed = append(packed, d.Clue...)
-		}
+	}
+	emit("CommitmentsInserted", []common.Hash{common.BigToHash(big.NewInt(1))}, uint32(0), commitments)
+	startLeaf := uint32(0)
+	for _, r := range members {
+		ids = append(ids, emitUnifiedNote(t, emit, r, address, startLeaf))
+		startLeaf += uint32(len(r.Params.NoteCommitments))
+		emit("BroadcasterFee", []common.Hash{common.BytesToHash(r.Params.Token[:]), common.BytesToHash(r.Params.FeeRecipient[:])}, r.Params.FeeAmount)
 		total.Add(total, r.Funding.Amount)
 	}
-	emit("BatchOutputs", []common.Hash{common.BigToHash(big.NewInt(1))}, uint32(0), big.NewInt(0), tokens, commitments, packed)
-	emit("TransactAggregated", []common.Hash{crypto.Keccak256Hash([]byte{0xde, 0xad, 0xbe, 0xef})}, big.NewInt(2))
+	emit("TransactAggregated", []common.Hash{crypto.Keccak256Hash([]byte{0xde, 0xad, 0xbe, 0xef})}, ids)
 	decoder, e := protocol.NewDecoder()
 	if e != nil {
 		t.Fatal(e)
@@ -294,4 +283,51 @@ func TestSettlementAggregateNativeMembersAndPooledPull(t *testing.T) {
 	if second.Operations[0].MemberIndex == nil || *second.Operations[0].MemberIndex != "1" || second.Snapshot != page.Snapshot {
 		t.Fatal("member order/snapshot lost")
 	}
+	// Aggregate inclusion order is authenticated independently of member output positions.
+	aggregateLog := &logs[len(logs)-1]
+	aggregateLog.Data, e = contract.Events["TransactAggregated"].Inputs.NonIndexed().Pack([]common.Hash{ids[1], ids[0]})
+	if e != nil {
+		t.Fatal(e)
+	}
+	badBatch, e := decoder.Decode(store.batch.Block, logs)
+	if e != nil {
+		t.Fatal(e)
+	}
+	store.batch = &badBatch
+	if _, e = a.GetSettlementOperations(context.Background(), OperationsQuery{Limit: 2}); e == nil {
+		t.Fatal("accepted reordered aggregate inclusion")
+	}
+}
+
+func emitUnifiedNote(t *testing.T, emit func(string, []common.Hash, ...any), r settlement.Request, core common.Address, start uint32) common.Hash {
+	t.Helper()
+	p := *abi.ConvertType(r.Params, new(sdkprotocol.CrossTreeTransactParams)).(*sdkprotocol.CrossTreeTransactParams)
+	ds := *abi.ConvertType(r.Deliveries, new([]sdkprotocol.Delivery)).(*[]sdkprotocol.Delivery)
+	f := sdkprotocol.FundingParams{Payer: r.Funding.Payer, Amount: r.Funding.Amount}
+	id, e := sdkprotocol.NoteOperationID(sdkprotocol.TransactionContext{ChainID: big.NewInt(56), ProtocolAddress: core}, 1, p, ds, f)
+	if e != nil {
+		t.Fatal(e)
+	}
+	emit("NoteOperation", []common.Hash{id, common.BytesToHash(r.Params.Token[:])}, uint8(1), big.NewInt(int64(len(r.Params.NoteCommitments))), r.Params.Deadline, r.Params.FeeRecipient, r.Params.FeeAmount)
+	if len(r.Params.Nullifiers) > 0 {
+		emit("NoteStateTransition", []common.Hash{id}, r.Params.Sources, r.Params.Nullifiers)
+	}
+	if r.Funding.Amount.Sign() > 0 {
+		emit("PublicDeposit", []common.Hash{id, common.BytesToHash(r.Params.Token[:]), common.BytesToHash(r.Funding.Payer[:])}, r.Funding.Amount)
+	}
+	if r.Params.WithdrawalAmount.Sign() > 0 {
+		emit("PublicWithdrawal", []common.Hash{id, common.BytesToHash(r.Params.Token[:]), common.BytesToHash(r.Params.WithdrawalAddress[:])}, r.Params.WithdrawalAmount)
+	}
+	packed := []byte{}
+	for _, d := range r.Deliveries {
+		packed = append(packed, byte(len(d.Ciphertext)>>8), byte(len(d.Ciphertext)))
+		if len(d.Ciphertext) > 0 {
+			packed = append(packed, d.Ciphertext...)
+			packed = append(packed, d.Clue...)
+		}
+	}
+	if len(r.Params.NoteCommitments) > 0 {
+		emit("NoteOutputs", []common.Hash{id, common.BigToHash(big.NewInt(1))}, start, packed)
+	}
+	return id
 }

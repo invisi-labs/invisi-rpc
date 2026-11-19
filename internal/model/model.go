@@ -56,6 +56,7 @@ type Insertion struct {
 	LogIndex    uint          `json:"logIndex"`
 }
 type NoteOutput struct {
+	OperationID     common.Hash    `json:"operationId,omitempty"`
 	Block           Block          `json:"block"`
 	TreeID          uint64         `json:"treeId"`
 	LeafIndex       uint32         `json:"leafIndex"`
