@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/invisi-labs/invisi-rpc/internal/model"
+	"github.com/invisi-labs/invisi-sdk-go/protocol/contracts"
 )
 
 type emptyBytesStateFake struct {
@@ -108,5 +109,44 @@ func TestChainStateReadBoundaries(t *testing.T) {
 	f.r = nil
 	if v, e := a.ReadChainState(ctx, ChainStateRequest{Kind: "receipt", TransactionHash: hash}); e != nil || v.Receipt != nil {
 		t.Fatal(e)
+	}
+}
+
+func TestChainStateCreditWalletReadsAndSimulation(t *testing.T) {
+	ab, e := contracts.InvisiCoreMetaData.GetAbi()
+	if e != nil {
+		t.Fatal(e)
+	}
+	f := &stateFake{}
+	a := &API{ChainState: f, Deployment: model.Deployment{Protocol: common.HexToAddress("1")}}
+	for _, tc := range []struct {
+		name string
+		args []any
+	}{
+		{"creditAllocation", []any{common.HexToAddress("2"), common.HexToAddress("3")}},
+		{"creditRevocationBitmap", []any{common.HexToAddress("2"), common.HexToAddress("3"), uint64(1), uint8(0)}},
+		{"creditDraw", []any{[]byte{}, contracts.IInvisiCoreCreditDrawParams{TotalAmount: big.NewInt(3), Deadline: big.NewInt(2000000000), FeeAmount: big.NewInt(1)}, []contracts.IInvisiCoreDelivery{}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			data, e := ab.Pack(tc.name, tc.args...)
+			if e != nil {
+				t.Fatal(e)
+			}
+			r := ChainStateRequest{Kind: "call", Address: a.Deployment.Protocol, Data: data}
+			before := f.calls
+			if _, e = a.ReadChainState(context.Background(), r); e != nil {
+				t.Fatal(e)
+			}
+			if f.calls != before+1 {
+				t.Fatal("allowed call not forwarded")
+			}
+			r.Data = append(r.Data, 0)
+			if _, e = a.ReadChainState(context.Background(), r); e == nil {
+				t.Fatal("noncanonical calldata allowed")
+			}
+			if f.calls != before+1 {
+				t.Fatal("rejected call reached upstream")
+			}
+		})
 	}
 }
