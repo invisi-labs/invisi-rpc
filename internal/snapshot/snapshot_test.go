@@ -718,3 +718,39 @@ func TestUnifiedSnapshotRejectsPreUnifiedABI(t *testing.T) {
 		}
 	}
 }
+
+func TestSQLiteRestorePreviousUnifiedEventSchema(t *testing.T) {
+	ctx := context.Background()
+	dep, batches := fixture()
+	h := header(dep)
+	// Prior unified receipts include the retired screening administration event.
+	legacyData := json.RawMessage(`{"newScreener":"0x0000000000000000000000000000000000001234"}`)
+	batches[0].Events = []model.Event{{Block: batches[0].Block, Name: "ScreenerUpdated", LogIndex: 0, Data: legacyData}}
+	h.ABIHash = "1c9bb909c286ebe03d6f4f138a1c74d5b7f0101211f78177aaf163f78b472189"
+	path := filepath.Join(t.TempDir(), "previous-unified.gz")
+	writeRecords(t, path, []record{{Type: "header", Header: &h}, {Type: "block", Batch: &batches[0]}, {Type: "block", Batch: &batches[1]}, {Type: "footer", Checkpoint: &batches[1].Block}})
+	destination, err := storage.OpenSQLite(ctx, filepath.Join(t.TempDir(), "restored.sqlite"), dep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer destination.Close()
+	if err = Restore(ctx, destination, dep, path, fileHash(t, path)); err != nil {
+		t.Fatal(err)
+	}
+	head, err := destination.Checkpoint(ctx)
+	if err != nil || head == nil || *head != batches[1].Block {
+		t.Fatal(head, err)
+	}
+	exported, err := Export(ctx, destination, dep, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := Inspect(exported)
+	if err != nil || current.ABIHash != ABIHash {
+		t.Fatal(current, err)
+	}
+	events, err := destination.Events(ctx, dep.FromBlock, batches[1].Block.Number, 10)
+	if err != nil || len(events) != 1 || events[0].Name != "ScreenerUpdated" || string(events[0].Data) != string(legacyData) {
+		t.Fatal(events, err)
+	}
+}

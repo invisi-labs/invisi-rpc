@@ -2,7 +2,6 @@
 
 Standalone Go service for public Invisi data: canonical events, shared Note Trees, historical membership paths. Depends only on the Go SDK protocol module, not the wallet SDK. Wallet clients retain decryption, private note storage, authorization and proving, and verify results through an independent Chain RPC.
 
-
 ```text
 invisi-rpc (chain authentication / indexing / pagination)
   └── invisi-sdk-go/protocol v1.3.2
@@ -10,20 +9,6 @@ invisi-rpc (chain authentication / indexing / pagination)
 ```
 
 The service does not depend on the wallet SDK. Shared settlement fixtures are maintained in `../invisi-sdk-go/protocol/settlement`; regenerate them from that module with `node generate.mjs`.
-
-
-
-## Local SDK workspace
-
-The RPC v1.3.1 release uses the published Go SDK `protocol` and `primitives` v1.3.2 modules and includes the unified Core receipt bindings. Standalone builds need no sibling checkout. For local SDK changes, use an untracked `go.work` rather than machine-specific `replace` directives in `go.mod`:
-
-```sh
-go work init . ../invisi-sdk-go/primitives ../invisi-sdk-go/protocol
-go env GOWORK
-go list -m github.com/invisi-labs/invisi-sdk-go/protocol
-```
-
-If `go.work` already exists, use `go work use` with those paths instead. `go.work` and `go.work.sum` stay locally Git-ignored and are excluded from Docker build contexts. Keep the committed v1.3.2 dependency requirements when using a workspace for local SDK changes. Validate standalone release builds with `GOWORK=off`; a production release must not depend on a sibling checkout.
 
 ## Release downloads
 
@@ -83,7 +68,7 @@ The backend is public by default. Put production traffic behind HTTPS and, where
 | `internal/storage`, `internal/snapshot` | SQLite/PostgreSQL and portable bootstrap |
 | `internal/rpc` | HTTP public queries and limits |
 
-Core and receiving-registry event schemas come directly from `invisi-sdk-go/protocol/contracts`; RPC does not keep a second copy of those ABIs. `go generate ./internal/protocol` regenerates only the Broadcaster Registry schema, which is not yet exported by that Go SDK module. Snapshot metadata pins the combined event schema; the reviewed pre-Core-name fingerprint remains readable because only ABI type metadata changed. Crypto source references and independent Noir/Barretenberg/Rust vectors are retained.
+Core and receiving-registry event schemas come directly from `invisi-sdk-go/protocol/contracts`; RPC does not keep a second copy of those ABIs. `go generate ./internal/protocol` regenerates only the Broadcaster Registry schema, which is not yet exported by that Go SDK module. Snapshot metadata pins the combined event schema; the immediately preceding unified-receipt fingerprint remains readable, preserving historical administrative events after the screening hook is removed. Crypto source references and independent Noir/Barretenberg/Rust vectors are retained.
 
 ```sh
 go test ./...
@@ -126,4 +111,24 @@ The project, CLI and future release artifacts use `invisi-rpc`. New installation
 
 ## GitHub namespace migration
 
-The source uses `github.com/invisi-labs` and published Go SDK `protocol` and `primitives` v1.3.2 modules. An ignored local `go.work` is optional for SDK development; release builds resolve the published modules with `GOWORK=off`. Container workflows target `ghcr.io/invisi-labs`. Verify the target image and digest before deployment; changing source configuration does not publish or copy existing images.
+The source uses `github.com/invisi-labs` and the local SDK development cohort described below. Container workflows target `ghcr.io/invisi-labs`. No image, binary or deployment is published by local development commits.
+
+## Local SDK development
+
+This development tree follows the sibling `../invisi-sdk-go` checkout through committed relative `go.mod` replacements. All SDK modules resolve to the same local source cohort, including transitive imports. The published baseline requirements are v1.3.2; the next planned SDK release is v1.3.3, which is not tagged or published by this change.
+
+```sh
+GOWORK=off go list -m -json github.com/invisi-labs/invisi-sdk-go/protocol
+GOWORK=off go test ./...
+GOWORK=off go build ./...
+```
+
+Keep both repositories as siblings. The module listing must show a local `Replace.Dir`; a registry download is not a substitute for this development source. Existing ignored workspaces are optional; `GOWORK=off` still uses the committed local SDK replacements.
+
+Container builds also require the SDK source context:
+
+```sh
+docker buildx build --build-context invisi_sdk_go=../invisi-sdk-go -t invisi-rpc:local .
+```
+
+The source is mounted read-only during Go build stages. Standalone release builds must be switched to the published v1.3.3 cohort after that SDK release; this local-source stage does not publish binaries or images.

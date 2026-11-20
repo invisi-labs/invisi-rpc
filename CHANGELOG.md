@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Update the event-schema fingerprint while preserving restore support for the previous unified snapshot format and its historical administrative events.
+- Follow the latest sibling Go SDK source cohort for the planned v1.3.3 compatibility update, including the Core ABI without address-screening hooks. Keep source recognition, authorization and proof semantics unchanged.
+
 ## 1.3.1
 
 - Upgrade the published Go SDK protocol and primitives modules to v1.3.2, including the previously unshipped v1.3.1 dependency alignment.

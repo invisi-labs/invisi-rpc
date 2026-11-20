@@ -52,3 +52,15 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
+
+// Development source cohort for the planned v1.3.3 release.
+replace (
+	github.com/invisi-labs/invisi-sdk-go => ../invisi-sdk-go
+	github.com/invisi-labs/invisi-sdk-go/ipp => ../invisi-sdk-go/ipp
+	github.com/invisi-labs/invisi-sdk-go/paymentrouter => ../invisi-sdk-go/paymentrouter
+	github.com/invisi-labs/invisi-sdk-go/primitives => ../invisi-sdk-go/primitives
+	github.com/invisi-labs/invisi-sdk-go/protocol => ../invisi-sdk-go/protocol
+	github.com/invisi-labs/invisi-sdk-go/prover => ../invisi-sdk-go/prover
+	github.com/invisi-labs/invisi-sdk-go/rpc => ../invisi-sdk-go/rpc
+	github.com/invisi-labs/invisi-sdk-go/session => ../invisi-sdk-go/session
+)

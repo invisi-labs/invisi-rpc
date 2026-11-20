@@ -60,4 +60,4 @@ Format 3 separates ordinary `outputs` from `creditStates`, with both encrypted s
 
 See the [repository contribution guidelines](../../README.md#contributing).
 
-Core and receiving-registry ABIs are supplied by the Go SDK. The source profile retains its existing identifier. The current fingerprint and the explicitly reviewed metadata-equivalent pre-Core-name fingerprint are accepted; arbitrary fingerprints remain rejected. Newly exported snapshots use the current fingerprint.
+Core and receiving-registry ABIs are supplied by the Go SDK. The source profile retains its existing identifier. The current fingerprint and the immediately preceding unified-receipt fingerprint (`1c9bb909…`) are accepted. The retired screening administration event changes the full ABI fingerprint, while settlement and snapshot storage layouts remain compatible. Restored historical events are preserved as stored. Pre-unified and arbitrary fingerprints remain rejected. Newly exported snapshots use the current fingerprint.
