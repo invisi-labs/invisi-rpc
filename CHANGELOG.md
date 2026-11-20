@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.1
+
+- Upgrade the published Go SDK protocol and primitives modules to v1.3.2, including the previously unshipped v1.3.1 dependency alignment.
+- Allow canonical `creditAllocation` and `creditRevocationBitmap` reads through `invisi_readChainState`, enabling WalletSession consumption and revocation checks without a separate chain RPC connection.
+- Allow canonical `creditDraw` read-only simulations while continuing to reject unknown selectors, malformed argument widths and trailing calldata. Transaction submission remains outside the RPC API.
+- Preserve the existing Protocol v1 deployment, indexed database, canonical receipt checks and durable finality anchors.
+
 ## 1.3.0
 
 - Consume Go SDK v1.3.0 and the redeployed Core unified receipt events.
