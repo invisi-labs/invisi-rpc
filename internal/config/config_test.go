@@ -391,7 +391,7 @@ func TestHTTPConcurrencyConfiguration(t *testing.T) {
 }
 
 func TestPublishedConfigurationExample(t *testing.T) {
-	cfg, err := Load("../../config.example.json")
+	cfg, err := Load("testdata/operator-config.json")
 	if err != nil {
 		t.Fatal(err)
 	}
