@@ -5,7 +5,7 @@ Standalone Go service for public Invisi data: canonical events, shared Note Tree
 
 ```text
 invisi-rpc (chain authentication / indexing / pagination)
-  └── invisi-sdk-go/protocol v1.3.0
+  └── invisi-sdk-go/protocol v1.3.2
       └── settlement (canonical ABI and operation binding)
 ```
 
@@ -15,7 +15,7 @@ The service does not depend on the wallet SDK. Shared settlement fixtures are ma
 
 ## Local SDK workspace
 
-The v1.3.0 release uses published Go SDK v1.3.0 modules and includes the unified Core receipt bindings. Standalone builds need no sibling checkout. For local SDK changes, use an untracked `go.work` rather than machine-specific `replace` directives in `go.mod`:
+The RPC v1.3.1 release uses the published Go SDK `protocol` and `primitives` v1.3.2 modules and includes the unified Core receipt bindings. Standalone builds need no sibling checkout. For local SDK changes, use an untracked `go.work` rather than machine-specific `replace` directives in `go.mod`:
 
 ```sh
 go work init . ../invisi-sdk-go/primitives ../invisi-sdk-go/protocol
@@ -23,9 +23,11 @@ go env GOWORK
 go list -m github.com/invisi-labs/invisi-sdk-go/protocol
 ```
 
-If `go.work` already exists, use `go work use` with those paths instead. `go.work` and `go.work.sum` stay locally Git-ignored and are excluded from Docker build contexts. Keep the committed v1.3.0 dependency requirements when using a workspace for local SDK changes. A production release must not depend on a sibling checkout.
+If `go.work` already exists, use `go work use` with those paths instead. `go.work` and `go.work.sum` stay locally Git-ignored and are excluded from Docker build contexts. Keep the committed v1.3.2 dependency requirements when using a workspace for local SDK changes. Validate standalone release builds with `GOWORK=off`; a production release must not depend on a sibling checkout.
 
 ## Release downloads
+
+The current release is [RPC v1.3.1](https://github.com/invisi-labs/invisi-rpc/releases/tag/v1.3.1), built with Go SDK v1.3.2. Service and SDK version numbers are independent; see [CHANGELOG.md](CHANGELOG.md) and `go.mod` for the dependencies of each revision.
 
 Pushing a stable `vX.Y.Z` tag runs tests and publishes the multi-platform GHCR image and GitHub Release binaries from the same tagged source. Manual workflow dispatch accepts an existing tag. Release notes include the complete matching section from the tagged CHANGELOG.md, followed by image digest and artifact details.
 
@@ -33,7 +35,7 @@ Release archives are named `invisi-rpc_vX.Y.Z_<os>_<arch>`, covering Linux, macO
 
 ## Initialize and run
 
-Requirements: Go 1.26+, an EVM Chain RPC for each selected chain, and either SQLite (default, embedded) or PostgreSQL 16+. The CLI uses [urfave/cli v3](https://cli.urfave.org/v3/).
+Building from source requires Go 1.26.1 or later. Released binaries need no Go installation. Running requires an EVM Chain RPC for each selected chain and either SQLite (default, embedded) or PostgreSQL 16+. The CLI uses [urfave/cli v3](https://cli.urfave.org/v3/).
 
 ```sh
 go build -o ./bin/invisi-rpc ./cmd
@@ -52,6 +54,8 @@ Full command syntax, flags, environment variables, database setup, snapshot boot
 `init` creates an empty configuration without contacting a Chain RPC and refuses to overwrite it. Chain changes are locked, published atomically and reloaded while running. Removing a chain retains its database and snapshots. Each chain has independent state and shares the HTTP listener; `GET /v1` lists active routes at `/v1/chains/<chainId>`.
 
 The canonical [deployment catalog](../invisi-core/deployment/deployment.json) is owned by Protocol deployment tooling. No deployment records are embedded in this binary. `chain add` copies the selected deployment pins into the configuration; later catalog edits do not retarget an initialized node. Startup authenticates each upstream chain ID, runtime code and saved checkpoint before serving. The current catalog contains a controlled local deployment with mock verifiers.
+
+RPC v1.3.1 requires the unified Core receipt events `NoteOperation`, `NoteOutputs` and `NoteStateTransition`; matching function selectors alone do not establish compatibility with older Core deployments. The BSC Testnet instance verified on 2026-11-20 is `0xF07174b5d9998456F1C6c03d12CbC071595Df07A`, from block `143673444`, with runtime code hash `0xadbbe6e0adb3f63f10c46d51e05881dd153948cffe8373de60171859fd5ffb68`. Use the [immutable deployment catalog](https://github.com/invisi-labs/invisi-core/blob/3dbf69e65a02599392e012ee0f46a2b4b2dd0bee/deployment/deployment.json) and [deployment record](https://github.com/invisi-labs/invisi-core/blob/3dbf69e65a02599392e012ee0f46a2b4b2dd0bee/deployment/chain97-20261120.json) for that instance, rather than assuming an arbitrary `main` catalog matches the running services. The deployment used Core source `f2b8bbbc316099f1305741584a356dd05d200864`; Core `627277ba45c10394b63c991602246f7f5b918c6c` has the same contract sources and Transact/Credit circuits. Pin the complete deployment, including registry addresses and start blocks, before initializing an index.
 
 Snapshots contain public normalized history and can bootstrap SQLite or PostgreSQL. Obtain snapshots and expected checksums from a trusted publisher: a checksum alone does not authenticate historical records. Imports are atomic and deployment-bound; clients retain independent chain verification. See the [snapshot trust and bootstrap reference](cammand.md#snapshots-and-bootstrap). No keys, private notes or wallet secrets belong in this service.
 
@@ -122,4 +126,4 @@ The project, CLI and future release artifacts use `invisi-rpc`. New installation
 
 ## GitHub namespace migration
 
-The source uses `github.com/invisi-labs` and the unpublished Go SDK `v1.3.0`. Before that SDK release, validate with an ignored local `go.work`; release builds must resolve the published modules without the workspace. Container workflows target `ghcr.io/invisi-labs`. Verify the target image and digest before deployment; changing source configuration does not publish or copy existing images.
+The source uses `github.com/invisi-labs` and published Go SDK `protocol` and `primitives` v1.3.2 modules. An ignored local `go.work` is optional for SDK development; release builds resolve the published modules with `GOWORK=off`. Container workflows target `ghcr.io/invisi-labs`. Verify the target image and digest before deployment; changing source configuration does not publish or copy existing images.
