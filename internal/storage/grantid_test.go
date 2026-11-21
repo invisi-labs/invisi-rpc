@@ -162,3 +162,22 @@ func TestGrantIDSameBlockCanonicalLogOrderAndAtomicity(t *testing.T) {
 		})
 	}
 }
+
+func TestZeroTokenGrantEventsRequireFeeFreeRevocation(t *testing.T) {
+	owner, zero := common.HexToAddress("1").Hex(), (common.Address{}).Hex()
+	for _, tc := range []struct{ name, kind, raw string }{
+		{"creation", "CreditCreated", fmt.Sprintf(`{"owner":%q,"token":%q,"grantId":"1","feeAmount":"0"}`, owner, zero)},
+		{"paid revoke", "CreditRevoked", fmt.Sprintf(`{"owner":%q,"token":%q,"grantId":"1","feeAmount":"1"}`, owner, zero)},
+		{"missing fee", "CreditRevoked", fmt.Sprintf(`{"owner":%q,"token":%q,"grantId":"1"}`, owner, zero)},
+		{"noncanonical fee", "CreditRevoked", fmt.Sprintf(`{"owner":%q,"token":%q,"grantId":"1","feeAmount":"00"}`, owner, zero)},
+		{"missing token", "CreditRevoked", fmt.Sprintf(`{"owner":%q,"grantId":"1","feeAmount":"0"}`, owner)},
+		{"null token", "CreditRevoked", fmt.Sprintf(`{"owner":%q,"token":null,"grantId":"1","feeAmount":"0"}`, owner)},
+		{"zero owner", "CreditRevoked", fmt.Sprintf(`{"owner":%q,"token":%q,"grantId":"1","feeAmount":"0"}`, zero, zero)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := grants(model.Batch{Events: []model.Event{{Name: tc.kind, Data: []byte(tc.raw)}}}); err == nil {
+				t.Fatal("accepted invalid zero-token grant event")
+			}
+		})
+	}
+}

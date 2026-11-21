@@ -115,8 +115,8 @@ type CreditStatus struct {
 }
 
 func (a *API) grantAnchor(ctx context.Context, owner, token common.Address, n uint64) (typedBackend, *model.Block, error) {
-	if owner == (common.Address{}) || token == (common.Address{}) {
-		return nil, nil, errors.New("nonzero owner and token required")
+	if owner == (common.Address{}) {
+		return nil, nil, errors.New("nonzero owner required")
 	}
 	s, e := a.typed()
 	if e != nil {

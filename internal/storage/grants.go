@@ -34,8 +34,23 @@ func grants(b model.Batch) ([]struct {
 		if e := model.ValidateGrantID(g.GrantID); e != nil {
 			return nil, errors.New("unsupported legacy or invalid grant history: canonical positive uint128 grantId required; rebuild from current Core deployment")
 		}
-		if g.Owner == (common.Address{}) || g.Token == (common.Address{}) {
-			return nil, errors.New("nonzero grant owner and token required")
+		if g.Owner == (common.Address{}) {
+			return nil, errors.New("nonzero grant owner required")
+		}
+		if g.Token == (common.Address{}) {
+			// Core permits disabling an unused ID for the zero token only when
+			// no fee is charged. Require explicit canonical event fields so a
+			// missing token cannot masquerade as a legitimate pre-revocation.
+			var revoke struct {
+				Token     *common.Address `json:"token"`
+				FeeAmount string          `json:"feeAmount"`
+			}
+			if e := json.Unmarshal(event.Data, &revoke); e != nil {
+				return nil, e
+			}
+			if event.Name != "CreditRevoked" || revoke.Token == nil || revoke.FeeAmount != "0" {
+				return nil, errors.New("zero grant token requires fee-free revocation")
+			}
 		}
 		out = append(out, struct {
 			Event model.Event
