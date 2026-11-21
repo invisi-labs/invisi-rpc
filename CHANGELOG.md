@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Persist complete original headers with indexed blocks and portable snapshots; serve bounded, deployment-pinned historical header ranges without repeat upstream reads. Backfill legacy history atomically without resetting indexed state, and preserve live canonical/finality, consumption, revocation and reorg checks.
+
 - Update the event-schema fingerprint while preserving restore support for the previous unified snapshot format and its historical administrative events.
 - Follow the latest sibling Go SDK source cohort for the planned v1.3.3 compatibility update, including the Core ABI without address-screening hooks. Keep source recognition, authorization and proof semantics unchanged.
 

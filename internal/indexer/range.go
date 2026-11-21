@@ -167,6 +167,7 @@ func (i *Indexer) stepRange(ctx context.Context) (attempt rangeAttempt, err erro
 		if blocks[n].Block != b {
 			return attempt, errors.New("decoder changed range block identity")
 		}
+		blocks[n].Header = types.CopyHeader(h)
 	}
 	// Recheck the full persistent finality context after fetching, before taking a writer lock.
 	anchor, e = fin.Finalized(ctx)

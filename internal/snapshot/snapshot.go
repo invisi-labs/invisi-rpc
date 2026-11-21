@@ -129,6 +129,9 @@ func Export(ctx context.Context, backend storage.Backend, dep model.Deployment, 
 		if e := ctx.Err(); e != nil {
 			return e
 		}
+		if e := b.ValidateHeader(); e != nil {
+			return e
+		}
 		if e := checkBatch(dep, last, b.Block); e != nil {
 			return e
 		}
@@ -305,6 +308,9 @@ func (r *reader) next(ctx context.Context) (model.Batch, error) {
 			return model.Batch{}, errors.New("invalid snapshot block record")
 		}
 		b := *rec.Batch
+		if err = b.ValidateHeader(); err != nil {
+			return model.Batch{}, err
+		}
 		if err = checkBatch(r.header.Deployment, r.last, b.Block); err != nil {
 			return model.Batch{}, err
 		}

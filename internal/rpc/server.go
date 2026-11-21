@@ -37,12 +37,13 @@ type FinalityReader interface {
 	Read(context.Context) finality.Snapshot
 }
 type API struct {
-	ChainState   ChainStateReader
-	Finality     FinalityReader
-	Transactions TransactionReader
-	Store        Backend
-	Deployment   model.Deployment
-	version      VersionInfo
+	HistoricalHeaders HistoricalHeaderSource
+	ChainState        ChainStateReader
+	Finality          FinalityReader
+	Transactions      TransactionReader
+	Store             Backend
+	Deployment        model.Deployment
+	version           VersionInfo
 }
 type Range struct {
 	FromBlock uint64      `json:"fromBlock"`

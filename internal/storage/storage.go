@@ -187,6 +187,9 @@ func (s *Store) Apply(ctx context.Context, b model.Batch) error {
 
 // apply runs inside the caller's deployment writer transaction.
 func (s *Store) apply(ctx context.Context, tx pgx.Tx, b model.Batch) error {
+	if err := b.ValidateHeader(); err != nil {
+		return err
+	}
 	if b.Block.Number > math.MaxInt64 {
 		return errors.New("block number out of range")
 	}

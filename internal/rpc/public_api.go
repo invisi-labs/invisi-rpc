@@ -40,6 +40,16 @@ func (a *publicAPI) GetStatus(ctx context.Context) (any, error) {
 func (a *publicAPI) GetBlock(ctx context.Context, number uint64) (any, error) {
 	return publicResult(a.api.GetBlock(ctx, number))
 }
+func (a *publicAPI) GetBlockHeaders(ctx context.Context, r HeaderRangeRequest) (any, error) {
+	value, err := a.api.GetBlockHeaders(ctx, r)
+	if err != nil {
+		var unavailable headersUnavailableError
+		if !errors.As(err, &unavailable) {
+			err = errors.New("historical header request failed")
+		}
+	}
+	return publicResult(value, err)
+}
 func (a *publicAPI) GetRoots(ctx context.Context, treeID uint64) (any, error) {
 	return publicResult(a.api.GetRoots(ctx, treeID))
 }

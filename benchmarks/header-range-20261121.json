@@ -1,0 +1,34 @@
+{
+  "coldBackfillMs": 5755.716,
+  "coldBackfillProtocolRpcRequests": 15,
+  "fromBlock": 143673426,
+  "headers": 256,
+  "lastBlockHash": "0xacdbbf1f45b9ce66f0dae0f699ba31f96cad2ccee1a5c62faf4fe466f674de71",
+  "localHistoricalRangeMs": [
+    57.202,
+    56.963,
+    58.121,
+    57.708,
+    58.04
+  ],
+  "localHistoricalRequestsPerSample": 1,
+  "localLegacyBatchMs": [
+    64.162,
+    64.167,
+    64.735,
+    64.541,
+    65.539
+  ],
+  "localLegacyRequestsPerSample": 13,
+  "onlineLiveBatchMs": [
+    5005.874,
+    3671.132,
+    3945.405
+  ],
+  "onlineLiveBatchRequestsPerSample": 13,
+  "originalHashesAndLiveFinalAnchorVerified": true,
+  "scope": "Header acquisition only. New range runs locally; public network latency is not simulated. Production RPC and wallet runtime are unchanged.",
+  "sourceRpc": "https://rpc.invisipay.fi/v1/chains/97",
+  "toBlock": 143673681,
+  "warmUpstreamRequests": 0
+}

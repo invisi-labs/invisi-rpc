@@ -148,6 +148,7 @@ type BroadcasterPage struct {
 	Next         *common.Address         `json:"next,omitempty"`
 }
 type Batch struct {
+	Header           *types.Header        `json:"header,omitempty"`
 	Broadcasters     []BroadcasterUpdate  `json:"broadcasters,omitempty"`
 	Registrations    []RegistrationUpdate `json:"registrations,omitempty"`
 	Block            Block                `json:"block"`
@@ -190,7 +191,8 @@ func (b *Batch) BindBlockContext() {
 // UnmarshalJSON requires a current block record for persisted and snapshot batches.
 func (b *Batch) UnmarshalJSON(data []byte) error {
 	var required struct {
-		Block *Block `json:"block"`
+		Block  *Block          `json:"block"`
+		Header json.RawMessage `json:"header"`
 	}
 	if err := json.Unmarshal(data, &required); err != nil {
 		return err
@@ -203,8 +205,15 @@ func (b *Batch) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &value); err != nil {
 		return err
 	}
+	if len(required.Header) > 0 && string(required.Header) != "null" {
+		h, err := DecodeCompleteHeader(required.Header)
+		if err != nil {
+			return err
+		}
+		value.Header = h
+	}
 	*b = Batch(value)
-	return nil
+	return b.ValidateHeader()
 }
 
 // NoteLookup binds an indexed output to a membership proof from one storage snapshot.

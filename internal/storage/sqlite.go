@@ -273,6 +273,9 @@ func (s *SQLiteStore) Apply(ctx context.Context, b model.Batch) error {
 	return tx.Commit(ctx)
 }
 func (s *SQLiteStore) apply(ctx context.Context, tx *sqliteTx, b model.Batch) error {
+	if err := b.ValidateHeader(); err != nil {
+		return err
+	}
 	if b.Block.Number > math.MaxInt64 {
 		return errors.New("block number out of range")
 	}

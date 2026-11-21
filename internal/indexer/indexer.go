@@ -192,6 +192,10 @@ func (i *Indexer) step(ctx context.Context, finalityChecked bool) (bool, error) 
 	if err != nil {
 		return false, fmt.Errorf("decode block %d: %w", next, err)
 	}
+	if b.Block != (model.Block{Number: next, Hash: hash, ParentHash: h.ParentHash, Timestamp: h.Time}) {
+		return false, errors.New("decoder changed block identity")
+	}
+	b.Header = types.CopyHeader(h)
 	// Catch a concurrent reorg before publishing the block. Root validation uses the block hash too.
 	current, err := i.Chain.HeaderByNumber(ctx, new(big.Int).SetUint64(next))
 	if err != nil {
