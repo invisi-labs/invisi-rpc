@@ -3,7 +3,6 @@ package rpc
 import (
 	"context"
 	"errors"
-	"strconv"
 
 	"github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	"github.com/ethereum/go-ethereum/common"
@@ -13,8 +12,7 @@ import (
 type typedBackend interface {
 	CreditState(context.Context, common.Hash, uint64) (*model.CreditStateLookup, error)
 	ConsumedAt(context.Context, common.Hash, uint64, bool) (bool, error)
-	CreditAllocationAt(context.Context, common.Address, common.Address, uint64) (string, uint16, error)
-	CreditBitmapAt(context.Context, common.Address, common.Address, string, uint8, uint64) (string, error)
+	CreditStatusAt(context.Context, common.Address, common.Address, string, uint64) (uint8, error)
 }
 
 func (a *API) typed() (typedBackend, error) {
@@ -111,14 +109,9 @@ func (a *API) IsCreditConsumed(ctx context.Context, h common.Hash, n uint64) (bo
 	return a.consumed(ctx, h, n, true)
 }
 
-type CreditAllocation struct {
-	Block model.Block `json:"block"`
-	Shard string      `json:"shard"`
-	Slot  uint16      `json:"slot"`
-}
-type CreditBitmap struct {
+type CreditStatus struct {
 	Block  model.Block `json:"block"`
-	Bitmap string      `json:"bitmap"`
+	Status uint8       `json:"status"`
 }
 
 func (a *API) grantAnchor(ctx context.Context, owner, token common.Address, n uint64) (typedBackend, *model.Block, error) {
@@ -132,31 +125,28 @@ func (a *API) grantAnchor(ctx context.Context, owner, token common.Address, n ui
 	b, e := a.at(ctx, n)
 	return s, b, e
 }
-func (a *API) GetCreditAllocation(ctx context.Context, owner, token common.Address, n uint64) (*CreditAllocation, error) {
-	s, b, e := a.grantAnchor(ctx, owner, token, n)
-	if e != nil {
+func (a *API) GetCreditStatus(ctx context.Context, owner, token common.Address, grantID string, n uint64) (*CreditStatus, error) {
+	if e := model.ValidateGrantID(grantID); e != nil {
 		return nil, e
 	}
-	shard, slot, e := s.CreditAllocationAt(ctx, owner, token, n)
-	if e != nil {
-		return nil, e
-	}
-	return &CreditAllocation{*b, shard, slot}, a.unchanged(ctx, b)
-}
-func (a *API) GetCreditRevocationBitmap(ctx context.Context, owner, token common.Address, shard string, word uint8, n uint64) (*CreditBitmap, error) {
-	sh, e := strconv.ParseUint(shard, 10, 64)
-	if e != nil || sh == 0 || strconv.FormatUint(sh, 10) != shard {
-		return nil, errors.New("canonical positive uint64 shard required")
+	if n > 1<<53-1 || n < a.Deployment.FromBlock {
+		return nil, errors.New("requested block outside deployment or safe wire range")
 	}
 	s, b, e := a.grantAnchor(ctx, owner, token, n)
 	if e != nil {
 		return nil, e
 	}
-	bits, e := s.CreditBitmapAt(ctx, owner, token, shard, word, n)
+	status, e := s.CreditStatusAt(ctx, owner, token, grantID, n)
 	if e != nil {
 		return nil, e
 	}
-	return &CreditBitmap{*b, bits}, a.unchanged(ctx, b)
+	if status > 2 {
+		return nil, errors.New("invalid credit status")
+	}
+	if e = a.unchanged(ctx, b); e != nil {
+		return nil, e
+	}
+	return &CreditStatus{*b, status}, nil
 }
 
 type TransactionAvailability struct {

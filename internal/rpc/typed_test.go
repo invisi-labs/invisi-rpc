@@ -14,7 +14,7 @@ import (
 )
 
 func TestPublicMethodAllowlistAndUnknownMethod(t *testing.T) {
-	want := []string{"ReadChainState", "GetBlock", "GetBlockHeaders", "GetBroadcasters", "GetCreditAllocation", "GetCreditRevocationBitmap", "GetCreditState", "GetCreditTransitions", "GetDeployment", "GetEvents", "GetMembership", "GetNote", "GetNoteUpdates", "GetReceivingAddress", "GetSettlementOperations", "GetProtocolTransactions", "GetTransactionOperations", "GetRoots", "GetStatus", "GetTransactionCreditUpdates", "GetTransactionNoteUpdates", "GetVersion", "IsCreditConsumed", "IsNoteSpent"}
+	want := []string{"ReadChainState", "GetBlock", "GetBlockHeaders", "GetBroadcasters", "GetCreditStatus", "GetCreditState", "GetCreditTransitions", "GetDeployment", "GetEvents", "GetMembership", "GetNote", "GetNoteUpdates", "GetReceivingAddress", "GetSettlementOperations", "GetProtocolTransactions", "GetTransactionOperations", "GetRoots", "GetStatus", "GetTransactionCreditUpdates", "GetTransactionNoteUpdates", "GetVersion", "IsCreditConsumed", "IsNoteSpent"}
 	sort.Strings(want)
 	typ := reflect.TypeOf((*API)(nil))
 	got := make([]string, typ.NumMethod())
@@ -47,7 +47,7 @@ func TestTypedRPCSQLiteStateGrantAndTransactionBoundaries(t *testing.T) {
 	b.Insertions = []model.Insertion{{TreeID: 1, Commitments: []common.Hash{note, state}}}
 	b.Outputs = []model.NoteOutput{{TreeID: 1, Commitment: note, TransactionHash: tx}}
 	b.CreditStates = []model.CreditState{{TreeID: 1, LeafIndex: 1, Commitment: state, TransactionHash: tx, Deliveries: []model.Delivery{{Clue: []byte{255}}, {Clue: []byte{255}}}}}
-	b.Events = []model.Event{{Name: "CreditCreated", TransactionHash: tx, Data: []byte(`{"owner":"` + owner.Hex() + `","token":"` + token.Hex() + `","revocationShard":1,"revocationSlot":0}`)}}
+	b.Events = []model.Event{{Name: "CreditCreated", TransactionHash: tx, Data: []byte(`{"owner":"` + owner.Hex() + `","token":"` + token.Hex() + `","grantId":"1"}`)}}
 	if e = s.Apply(ctx, b); e != nil {
 		t.Fatal(e)
 	}
@@ -86,12 +86,8 @@ func TestTypedRPCSQLiteStateGrantAndTransactionBoundaries(t *testing.T) {
 	if e != nil || len(tc.States) != 1 || len(tc.Transitions) != 1 {
 		t.Fatalf("transaction Credit %+v %v", tc, e)
 	}
-	a, e := api.GetCreditAllocation(ctx, owner, token, 10)
-	if e != nil || a.Shard != "1" || a.Slot != 1 {
-		t.Fatalf("allocation %+v %v", a, e)
-	}
-	bm, e := api.GetCreditRevocationBitmap(ctx, owner, token, "1", 0, 10)
-	if e != nil || bm.Bitmap != "0" {
-		t.Fatalf("bitmap %+v %v", bm, e)
+	status, e := api.GetCreditStatus(ctx, owner, token, "1", 10)
+	if e != nil || status.Status != 1 {
+		t.Fatalf("status %+v %v", status, e)
 	}
 }

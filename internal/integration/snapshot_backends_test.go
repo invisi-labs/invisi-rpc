@@ -54,9 +54,9 @@ func TestSnapshotSQLitePostgresSQLite(t *testing.T) {
 	second := model.Batch{Block: model.Block{Number: 101, Hash: common.HexToHash("0x101"), ParentHash: first.Block.Hash}, Insertions: []model.Insertion{{TreeID: 7, Start: 2, Commitments: []common.Hash{common.HexToHash("0x3")}}}, Nullifiers: []common.Hash{common.HexToHash("0xabc")}}
 	owner, token := common.HexToAddress("1"), common.HexToAddress("2")
 	first.CreditStates = []model.CreditState{{TreeID: 7, LeafIndex: 1, Commitment: common.HexToHash("2"), Deliveries: []model.Delivery{{Ciphertext: []byte{1}}, {Ciphertext: []byte{2}}}}}
-	first.Events = append(first.Events, model.Event{Name: "CreditCreated", LogIndex: 1, Data: json.RawMessage(fmt.Sprintf(`{"owner":%q,"token":%q,"revocationShard":"1","revocationSlot":0}`, owner.Hex(), token.Hex()))})
+	first.Events = append(first.Events, model.Event{Name: "CreditCreated", LogIndex: 1, Data: json.RawMessage(fmt.Sprintf(`{"owner":%q,"token":%q,"grantId":"1"}`, owner.Hex(), token.Hex()))})
 	second.CreditNullifiers = []common.Hash{common.HexToHash("def")}
-	second.Events = []model.Event{{Name: "CreditRevoked", LogIndex: 2, Data: json.RawMessage(fmt.Sprintf(`{"owner":%q,"token":%q,"shard":"1","slot":0}`, owner.Hex(), token.Hex()))}}
+	second.Events = []model.Event{{Name: "CreditRevoked", LogIndex: 2, Data: json.RawMessage(fmt.Sprintf(`{"owner":%q,"token":%q,"grantId":"1"}`, owner.Hex(), token.Hex()))}}
 	must(t, source.Apply(ctx, first))
 	must(t, source.Apply(ctx, second))
 	originalRoots, err := source.Roots(ctx, 7, 10)
@@ -110,7 +110,7 @@ func TestSnapshotSQLitePostgresSQLite(t *testing.T) {
 			credit := backend.(interface {
 				CreditState(context.Context, common.Hash, uint64) (*model.CreditStateLookup, error)
 				ConsumedAt(context.Context, common.Hash, uint64, bool) (bool, error)
-				CreditBitmapAt(context.Context, common.Address, common.Address, string, uint8, uint64) (string, error)
+				CreditStatusAt(context.Context, common.Address, common.Address, string, uint64) (uint8, error)
 			})
 			state, e := credit.CreditState(ctx, common.HexToHash("2"), 101)
 			must(t, e)
@@ -122,9 +122,9 @@ func TestSnapshotSQLitePostgresSQLite(t *testing.T) {
 			if !used {
 				t.Fatal("Credit consumption lost")
 			}
-			bitmap, e := credit.CreditBitmapAt(ctx, owner, token, "1", 0, 101)
+			status, e := credit.CreditStatusAt(ctx, owner, token, "1", 101)
 			must(t, e)
-			if bitmap != "1" {
+			if status != 2 {
 				t.Fatal("revocation lost")
 			}
 			spent, e := backend.IsSpent(ctx, second.Nullifiers[0])

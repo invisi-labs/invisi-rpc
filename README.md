@@ -134,3 +134,8 @@ docker buildx build --build-context invisi_sdk_go=../invisi-sdk-go -t invisi-rpc
 ```
 
 The source is mounted read-only during Go build stages. Standalone release builds must be switched to the published v1.3.3 cohort after that SDK release; this local-source stage does not publish binaries or images.
+
+
+Current Credit indexing follows the committed SDK uint128 grant-ID ABI: `invisi_getCreditStatus(owner, token, decimalGrantId, atBlock)` returns canonical block metadata and status 0 (unknown), 1 (active), or 2 (permanently disabled). IDs are positive canonical decimal strings, scoped by chain, Core, owner and token; pre-revoke is supported and IDs cannot be reused. The retired allocation and bitmap endpoints are removed. Protocol/API version remains 1.
+
+Index and snapshot format 4 reject legacy shard/slot history. Reset or recreate development indexes and snapshots for the freshly deployed current Core; legacy IDs cannot be inferred or converted. The historical testnet deployment above is provenance for that instance, not an assertion that it supports the current Credit ABI. See [API compatibility and upgrade policy](api.md).

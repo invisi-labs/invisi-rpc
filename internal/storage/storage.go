@@ -83,13 +83,13 @@ func Open(ctx context.Context, url string, deployment model.Deployment) (*Store,
 		err = s.ensureBroadcasterProfile(ctx, tx)
 	}
 	if err == nil {
-		_, err = tx.Exec(ctx, "INSERT INTO invisi_index_formats VALUES($1,3) ON CONFLICT DO NOTHING", s.key)
+		_, err = tx.Exec(ctx, "INSERT INTO invisi_index_formats VALUES($1,4) ON CONFLICT DO NOTHING", s.key)
 	}
 	if err == nil {
 		var version int
 		err = tx.QueryRow(ctx, "SELECT version FROM invisi_index_formats WHERE deployment=$1", s.key).Scan(&version)
-		if err == nil && version != 3 {
-			err = errors.New("unsupported index format; use a fresh database and rebuild the event index")
+		if err == nil && version != 4 {
+			err = errors.New("unsupported index format (legacy or incompatible): reset/recreate the development index in a separate database from the current Core deployment; shard/slot history cannot be converted to grant IDs")
 		}
 	}
 	if err == nil {
@@ -292,7 +292,16 @@ func (s *Store) apply(ctx context.Context, tx pgx.Tx, b model.Batch) error {
 	}
 	for _, v := range gs {
 		g := v.Grant
-		if _, e = tx.Exec(ctx, "INSERT INTO invisi_credit_grants VALUES($1,$2,$3,$4,$5,$6,$7,$8)", s.key, g.Owner[:], g.Token[:], b.Block.Number, v.Event.LogIndex, v.Event.Name, string(g.Shard), g.Slot); e != nil {
+		var previous uint8
+		e = tx.QueryRow(ctx, "SELECT status FROM invisi_credit_status_events WHERE deployment=$1 AND owner=$2 AND token=$3 AND grant_id=$4 ORDER BY block_number DESC,log_index DESC LIMIT 1", s.key, g.Owner[:], g.Token[:], g.GrantID).Scan(&previous)
+		if e != nil && !errors.Is(e, pgx.ErrNoRows) {
+			return e
+		}
+		status, e := grantTransition(previous, v.Event.Name)
+		if e != nil {
+			return e
+		}
+		if _, e = tx.Exec(ctx, "INSERT INTO invisi_credit_status_events VALUES($1,$2,$3,$4,$5,$6,$7,$8)", s.key, g.Owner[:], g.Token[:], b.Block.Number, v.Event.LogIndex, v.Event.Name, g.GrantID, status); e != nil {
 			return e
 		}
 	}

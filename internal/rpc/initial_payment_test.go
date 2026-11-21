@@ -77,7 +77,7 @@ func TestInitialPaymentCanonicalReceipt(t *testing.T) {
 		if creation == nil || draw == nil {
 			t.Fatal("missing creation/payment fixture")
 		}
-		r := &settlement.Request{Method: "createCredit", Proof: []byte{1}, Creation: settlement.CreateCreditParams{Token: creation["token"].(common.Address), Owner: creation["owner"].(common.Address), RevocationShard: creation["revocationShard"].(uint64), RevocationSlot: creation["revocationSlot"].(uint16), CreditCommitment: creation["creditCommitment"].([32]byte), Deadline: creation["deadline"].(*big.Int), FeeRecipient: draw["feeRecipient"].(common.Address), FeeAmount: draw["feeAmount"].(*big.Int), HasInitialPayment: true, TotalAmount: draw["totalAmount"].(*big.Int), NoteCommitment: draw["noteCommitment"].([32]byte)}}
+		r := &settlement.Request{Method: "createCredit", Proof: []byte{1}, Creation: settlement.CreateCreditParams{Token: creation["token"].(common.Address), Owner: creation["owner"].(common.Address), GrantID: creation["grantId"].(*big.Int), CreditCommitment: creation["creditCommitment"].([32]byte), Deadline: creation["deadline"].(*big.Int), FeeRecipient: draw["feeRecipient"].(common.Address), FeeAmount: draw["feeAmount"].(*big.Int), HasInitialPayment: true, TotalAmount: draw["totalAmount"].(*big.Int), NoteCommitment: draw["noteCommitment"].([32]byte)}}
 		r.Deliveries = *abi.ConvertType(creation["deliveries"], new([]settlement.Delivery)).(*[]settlement.Delivery)
 		r.Deliveries = append(r.Deliveries, *abi.ConvertType(draw["delivery"], new(settlement.Delivery)).(*settlement.Delivery))
 		data, err := settlement.Encode(r)
@@ -113,7 +113,7 @@ func TestInitialPaymentCanonicalReceipt(t *testing.T) {
 			t.Fatalf("operations=%d", len(ops))
 		}
 		op := ops[0]
-		if op.Kind != "createCredit" || op.UnsupportedReason != "" || len(op.NoteOutputs) != 1 || len(op.CreditOutputs) != 1 || len(op.Funding) != 1 || op.Funding[0].Amount != "7" || op.NoteOutputs[0].Amount != "6" || op.FeeAmount != "1" || len(op.CreditNullifiers) != 0 {
+		if op.Kind != "createCredit" || op.UnsupportedReason != "" || len(op.NoteOutputs) != 1 || len(op.CreditOutputs) != 1 || len(op.Funding) != 1 || op.Funding[0].Amount != "7" || op.NoteOutputs[0].Amount != "7" || op.FeeAmount != "0" || len(op.CreditNullifiers) != 0 {
 			t.Fatalf("initial payment: %+v", op)
 		}
 		// An ordinary merchant Note must keep its independent delivery.
@@ -131,6 +131,16 @@ func TestInitialPaymentCanonicalReceipt(t *testing.T) {
 		if len(batch.CreatedTrees) == 0 {
 			batch.CreatedTrees = []uint64{1}
 		}
+		// The shared receipt was mined after earlier leaves. Supply their synthetic
+		// commitments solely to build a complete storage tree for this test.
+		if start := batch.Insertions[0].Start; start > 0 {
+			prior := make([]common.Hash, start)
+			for i := range prior {
+				prior[i] = common.BigToHash(big.NewInt(int64(i + 1)))
+			}
+			batch.Insertions[0].Commitments = append(prior, batch.Insertions[0].Commitments...)
+			batch.Insertions[0].Start = 0
+		}
 		if e = db.Apply(ctx, batch); e != nil {
 			db.Close()
 			t.Fatal(e)
@@ -146,11 +156,11 @@ func TestInitialPaymentCanonicalReceipt(t *testing.T) {
 			t.Fatalf("restart checkpoint: %+v %v", head, e)
 		}
 		note, e := db.Note(ctx, batch.Outputs[0].Commitment, block.Number)
-		if e != nil || note == nil || note.Output.LeafIndex != 1 || !bytes.Equal(note.Output.Ciphertext, r.Deliveries[2].Ciphertext) {
+		if e != nil || note == nil || note.Output.LeafIndex != batch.Outputs[0].LeafIndex || !bytes.Equal(note.Output.Ciphertext, r.Deliveries[2].Ciphertext) {
 			t.Fatalf("restart Note: %+v %v", note, e)
 		}
 		credit, e := db.CreditState(ctx, batch.CreditStates[0].Commitment, block.Number)
-		if e != nil || credit == nil || credit.State.LeafIndex != 0 {
+		if e != nil || credit == nil || credit.State.LeafIndex != batch.CreditStates[0].LeafIndex {
 			t.Fatalf("restart Credit: %+v %v", credit, e)
 		}
 		if e = db.Rollback(ctx, block.Number-1); e != nil {

@@ -123,13 +123,13 @@ func OpenSQLite(ctx context.Context, path string, d model.Deployment) (*SQLiteSt
 		e = s.ensureBroadcasterProfile(ctx, tx)
 	}
 	if e == nil {
-		_, e = tx.Exec(ctx, "INSERT INTO invisi_index_formats VALUES(?1,3) ON CONFLICT DO NOTHING", s.key)
+		_, e = tx.Exec(ctx, "INSERT INTO invisi_index_formats VALUES(?1,4) ON CONFLICT DO NOTHING", s.key)
 	}
 	if e == nil {
 		var version int
 		e = tx.QueryRow(ctx, "SELECT version FROM invisi_index_formats WHERE deployment=?1", s.key).Scan(&version)
-		if e == nil && version != 3 {
-			e = errors.New("unsupported index format; use a fresh database and rebuild the event index")
+		if e == nil && version != 4 {
+			e = errors.New("unsupported index format (legacy or incompatible): reset/recreate the development index in a separate database from the current Core deployment; shard/slot history cannot be converted to grant IDs")
 		}
 	}
 	if e == nil {
@@ -178,12 +178,12 @@ CREATE TABLE IF NOT EXISTS invisi_deployments (
  deployment TEXT PRIMARY KEY, from_block INTEGER NOT NULL, runtime_code_hash BLOB NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS invisi_credit_grants (
+CREATE TABLE IF NOT EXISTS invisi_credit_status_events (
  deployment text NOT NULL, owner blob NOT NULL, token blob NOT NULL, block_number bigint NOT NULL, log_index bigint NOT NULL,
- kind text NOT NULL, shard text NOT NULL, slot integer NOT NULL,
+ kind text NOT NULL, grant_id text NOT NULL, status integer NOT NULL CHECK(status IN (1,2)),
  PRIMARY KEY(deployment,block_number,log_index), FOREIGN KEY(deployment,block_number) REFERENCES invisi_blocks ON DELETE CASCADE
 );
-CREATE INDEX IF NOT EXISTS invisi_credit_grant_lookup ON invisi_credit_grants(deployment,owner,token,kind,block_number,log_index);
+CREATE INDEX IF NOT EXISTS invisi_credit_status_lookup ON invisi_credit_status_events(deployment,owner,token,grant_id,block_number,log_index);
 
 CREATE TABLE IF NOT EXISTS invisi_credit_nullifiers (
  deployment TEXT NOT NULL, hash BLOB NOT NULL, block_number INTEGER NOT NULL,
@@ -379,7 +379,16 @@ func (s *SQLiteStore) apply(ctx context.Context, tx *sqliteTx, b model.Batch) er
 	}
 	for _, v := range gs {
 		g := v.Grant
-		if _, e = tx.Exec(ctx, "INSERT INTO invisi_credit_grants VALUES(?1,?2,?3,?4,?5,?6,?7,?8)", s.key, g.Owner[:], g.Token[:], b.Block.Number, v.Event.LogIndex, v.Event.Name, string(g.Shard), g.Slot); e != nil {
+		var previous uint8
+		e = tx.QueryRow(ctx, "SELECT status FROM invisi_credit_status_events WHERE deployment=?1 AND owner=?2 AND token=?3 AND grant_id=?4 ORDER BY block_number DESC,log_index DESC LIMIT 1", s.key, g.Owner[:], g.Token[:], g.GrantID).Scan(&previous)
+		if e != nil && !errors.Is(e, sql.ErrNoRows) {
+			return e
+		}
+		status, e := grantTransition(previous, v.Event.Name)
+		if e != nil {
+			return e
+		}
+		if _, e = tx.Exec(ctx, "INSERT INTO invisi_credit_status_events VALUES(?1,?2,?3,?4,?5,?6,?7,?8)", s.key, g.Owner[:], g.Token[:], b.Block.Number, v.Event.LogIndex, v.Event.Name, g.GrantID, status); e != nil {
 			return e
 		}
 	}

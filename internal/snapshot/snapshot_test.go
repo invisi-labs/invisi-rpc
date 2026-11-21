@@ -719,7 +719,7 @@ func TestUnifiedSnapshotRejectsPreUnifiedABI(t *testing.T) {
 	}
 }
 
-func TestSQLiteRestorePreviousUnifiedEventSchema(t *testing.T) {
+func TestSQLiteRejectPreviousUnifiedEventSchema(t *testing.T) {
 	ctx := context.Background()
 	dep, batches := fixture()
 	h := header(dep)
@@ -734,23 +734,10 @@ func TestSQLiteRestorePreviousUnifiedEventSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer destination.Close()
-	if err = Restore(ctx, destination, dep, path, fileHash(t, path)); err != nil {
-		t.Fatal(err)
+	if err = Restore(ctx, destination, dep, path, fileHash(t, path)); err == nil {
+		t.Fatal("accepted legacy ABI snapshot")
 	}
-	head, err := destination.Checkpoint(ctx)
-	if err != nil || head == nil || *head != batches[1].Block {
-		t.Fatal(head, err)
-	}
-	exported, err := Export(ctx, destination, dep, t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	current, err := Inspect(exported)
-	if err != nil || current.ABIHash != ABIHash {
-		t.Fatal(current, err)
-	}
-	events, err := destination.Events(ctx, dep.FromBlock, batches[1].Block.Number, 10)
-	if err != nil || len(events) != 1 || events[0].Name != "ScreenerUpdated" || string(events[0].Data) != string(legacyData) {
-		t.Fatal(events, err)
+	if head, e := destination.Checkpoint(ctx); e != nil || head != nil {
+		t.Fatalf("legacy restore changed index %v %v", head, e)
 	}
 }

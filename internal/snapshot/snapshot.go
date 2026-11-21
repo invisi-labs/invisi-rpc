@@ -23,12 +23,9 @@ import (
 )
 
 const (
-	FormatVersion = 3
-	SourceProfile = "invisi-core-v1-unified-receipts"
-	ABIHash       = "63670aa67c983ffaf8281de303f8373745a2afd7b2e5ac4abcaae9366a8ed3b5"
-	// Prior unified snapshots retain their public administrative events. Settlement
-	// and normalized storage layouts are unchanged by screening-hook removal.
-	previousUnifiedABIHash            = "1c9bb909c286ebe03d6f4f138a1c74d5b7f0101211f78177aaf163f78b472189"
+	FormatVersion                     = 4
+	SourceProfile                     = "invisi-core-v1-unified-receipts"
+	ABIHash                           = "692dbb30e90d3434858a0aa0a2717a4409d09094ed517dd156dfde1cbc2add51"
 	DefaultMaxDecompressedBytes int64 = 8 << 30
 	MaxRecordBytes                    = 64 << 20
 )
@@ -60,7 +57,7 @@ func header(dep model.Deployment) Header {
 	return Header{Version: FormatVersion, SourceProfile: SourceProfile, ABIHash: ABIHash, Deployment: dep}
 }
 func checkHeader(h Header, dep *model.Deployment) error {
-	if h.Version != FormatVersion || h.SourceProfile != SourceProfile || (h.ABIHash != ABIHash && h.ABIHash != previousUnifiedABIHash) {
+	if h.Version != FormatVersion || h.SourceProfile != SourceProfile || h.ABIHash != ABIHash {
 		return errors.New("unsupported snapshot version or source profile")
 	}
 	if h.Checkpoint != nil {

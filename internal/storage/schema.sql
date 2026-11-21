@@ -49,11 +49,11 @@ CREATE TABLE IF NOT EXISTS invisi_credit_nullifiers (
  PRIMARY KEY(deployment,hash), FOREIGN KEY(deployment,block_number) REFERENCES invisi_blocks ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS invisi_credit_grants (
+CREATE TABLE IF NOT EXISTS invisi_credit_status_events (
  deployment text NOT NULL, owner bytea NOT NULL, token bytea NOT NULL, block_number bigint NOT NULL, log_index bigint NOT NULL,
- kind text NOT NULL, shard text NOT NULL, slot integer NOT NULL,
+ kind text NOT NULL, grant_id text NOT NULL, status integer NOT NULL CHECK(status IN (1,2)),
  PRIMARY KEY(deployment,block_number,log_index), FOREIGN KEY(deployment,block_number) REFERENCES invisi_blocks ON DELETE CASCADE
 );
-CREATE INDEX IF NOT EXISTS invisi_credit_grant_lookup ON invisi_credit_grants(deployment,owner,token,kind,block_number,log_index);
+CREATE INDEX IF NOT EXISTS invisi_credit_status_lookup ON invisi_credit_status_events(deployment,owner,token,grant_id,block_number,log_index);
 
 CREATE TABLE IF NOT EXISTS invisi_finalized_anchors (deployment text PRIMARY KEY, block text NOT NULL, conflicted integer NOT NULL DEFAULT 0);

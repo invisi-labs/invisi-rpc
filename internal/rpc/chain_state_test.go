@@ -123,8 +123,7 @@ func TestChainStateCreditWalletReadsAndSimulation(t *testing.T) {
 		name string
 		args []any
 	}{
-		{"creditAllocation", []any{common.HexToAddress("2"), common.HexToAddress("3")}},
-		{"creditRevocationBitmap", []any{common.HexToAddress("2"), common.HexToAddress("3"), uint64(1), uint8(0)}},
+		{"creditStatus", []any{common.HexToAddress("2"), common.HexToAddress("3"), big.NewInt(1)}},
 		{"creditDraw", []any{[]byte{}, contracts.IInvisiCoreCreditDrawParams{TotalAmount: big.NewInt(3), Deadline: big.NewInt(2000000000), FeeAmount: big.NewInt(1)}, []contracts.IInvisiCoreDelivery{}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

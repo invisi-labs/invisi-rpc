@@ -182,7 +182,7 @@ func (a *API) transactionOperationsInBlock(batch *model.Batch, tx *types.Transac
 				o.CreditNullifiers = append(o.CreditNullifiers, common.Hash(v))
 			}
 			for _, g := range r.Draw.GrantRefs {
-				o.GrantRefs = append(o.GrantRefs, settlement.GrantRef{PayerIndex: g.PayerIndex.String(), Shard: decimal(g.Shard), Slot: decimal(uint64(g.Slot))})
+				o.GrantRefs = append(o.GrantRefs, settlement.GrantRef{PayerIndex: g.PayerIndex.String(), GrantID: g.GrantID.String()})
 			}
 			for _, p := range r.Draw.Payers {
 				o.Funding = append(o.Funding, settlement.FundingReceipt{Payer: p.Payer, TokenAddress: o.TokenAddress, Amount: p.Amount.String()})
@@ -351,7 +351,7 @@ func matchCreditEvents(batch *model.Batch, tx common.Hash, r settlement.Request)
 			creationFee = new(big.Int)
 			creationRecipient = common.Address{}
 		}
-		event, err = authenticatedEvent(batch, tx, "CreditCreated", map[string]any{"token": p.Token, "owner": p.Owner, "revocationShard": p.RevocationShard, "revocationSlot": p.RevocationSlot, "creditCommitment": p.CreditCommitment, "deadline": p.Deadline, "feeRecipient": creationRecipient, "feeAmount": creationFee, "deliveries": r.Deliveries[:2]})
+		event, err = authenticatedEvent(batch, tx, "CreditCreated", map[string]any{"token": p.Token, "owner": p.Owner, "grantId": p.GrantID, "creditCommitment": p.CreditCommitment, "deadline": p.Deadline, "feeRecipient": creationRecipient, "feeAmount": creationFee, "deliveries": r.Deliveries[:2]})
 		if err != nil {
 			return nil, err
 		}
@@ -391,7 +391,7 @@ func matchCreditEvents(batch *model.Batch, tx common.Hash, r settlement.Request)
 		_, err = authenticatedEvent(batch, tx, "CreditStateTransition", map[string]any{"noteCommitment": p.NoteCommitment, "state": map[string]any{"sources": p.Sources, "payers": p.Payers, "grantRefs": p.GrantRefs, "nullifiers": p.Nullifiers, "creditCommitments": p.CreditCommitments, "recoveryAmounts": p.RecoveryAmounts}, "creditDeliveries": r.Deliveries[:2*n]})
 	case "revokeCredit":
 		p := r.Revocation
-		event, err = authenticatedEvent(batch, tx, "CreditRevoked", map[string]any{"owner": p.Owner, "token": p.Token, "shard": p.Shard, "slot": p.Slot, "feeRecipient": p.FeeRecipient, "feeAmount": p.FeeAmount})
+		event, err = authenticatedEvent(batch, tx, "CreditRevoked", map[string]any{"owner": p.Owner, "token": p.Token, "grantId": p.GrantID, "feeRecipient": p.FeeRecipient, "feeAmount": p.FeeAmount})
 	}
 	return event, err
 }

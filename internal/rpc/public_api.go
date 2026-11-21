@@ -77,12 +77,10 @@ func (a *publicAPI) IsNoteSpent(ctx context.Context, h common.Hash, n uint64) (a
 func (a *publicAPI) IsCreditConsumed(ctx context.Context, h common.Hash, n uint64) (any, error) {
 	return publicResult(a.api.IsCreditConsumed(ctx, h, n))
 }
-func (a *publicAPI) GetCreditAllocation(ctx context.Context, owner, token common.Address, n uint64) (any, error) {
-	return publicResult(a.api.GetCreditAllocation(ctx, owner, token, n))
+func (a *publicAPI) GetCreditStatus(ctx context.Context, owner, token common.Address, grantID string, n uint64) (any, error) {
+	return publicResult(a.api.GetCreditStatus(ctx, owner, token, grantID, n))
 }
-func (a *publicAPI) GetCreditRevocationBitmap(ctx context.Context, owner, token common.Address, shard string, word uint8, n uint64) (any, error) {
-	return publicResult(a.api.GetCreditRevocationBitmap(ctx, owner, token, shard, word, n))
-}
+
 func (a *publicAPI) GetTransactionNoteUpdates(ctx context.Context, h common.Hash) (any, error) {
 	return publicResult(a.api.GetTransactionNoteUpdates(ctx, h))
 }

@@ -15,8 +15,7 @@ import (
 type creditReader interface {
 	CreditState(context.Context, common.Hash, uint64) (*model.CreditStateLookup, error)
 	ConsumedAt(context.Context, common.Hash, uint64, bool) (bool, error)
-	CreditAllocationAt(context.Context, common.Address, common.Address, uint64) (string, uint16, error)
-	CreditBitmapAt(context.Context, common.Address, common.Address, string, uint8, uint64) (string, error)
+	CreditStatusAt(context.Context, common.Address, common.Address, string, uint64) (uint8, error)
 }
 
 func TestCreditNoteIsolationHistoricalAndReorg(t *testing.T) {
@@ -48,7 +47,7 @@ func TestCreditNoteIsolationHistoricalAndReorg(t *testing.T) {
 			owner, token := common.HexToAddress("1"), common.HexToAddress("2")
 			state, note := common.HexToHash("3"), common.HexToHash("4")
 			creditNull, noteNull := common.HexToHash("5"), common.HexToHash("6")
-			b := model.Batch{Block: model.Block{Number: 10, Hash: common.HexToHash("10")}, CreatedTrees: []uint64{1}, Insertions: []model.Insertion{{TreeID: 1, Commitments: []common.Hash{state, note}}}, Outputs: []model.NoteOutput{{TreeID: 1, LeafIndex: 1, Commitment: note}}, CreditStates: []model.CreditState{{TreeID: 1, Commitment: state, Deliveries: []model.Delivery{{Ciphertext: []byte{1}}, {Ciphertext: []byte{2}}}}}, Events: []model.Event{{Name: "CreditCreated", Data: []byte(fmt.Sprintf(`{"owner":%q,"token":%q,"revocationShard":1,"revocationSlot":0}`, owner.Hex(), token.Hex()))}}}
+			b := model.Batch{Block: model.Block{Number: 10, Hash: common.HexToHash("10")}, CreatedTrees: []uint64{1}, Insertions: []model.Insertion{{TreeID: 1, Commitments: []common.Hash{state, note}}}, Outputs: []model.NoteOutput{{TreeID: 1, LeafIndex: 1, Commitment: note}}, CreditStates: []model.CreditState{{TreeID: 1, Commitment: state, Deliveries: []model.Delivery{{Ciphertext: []byte{1}}, {Ciphertext: []byte{2}}}}}, Events: []model.Event{{Name: "CreditCreated", Data: []byte(fmt.Sprintf(`{"owner":%q,"token":%q,"grantId":"1"}`, owner.Hex(), token.Hex()))}}}
 			if e := s.Apply(ctx, b); e != nil {
 				t.Fatal(e)
 			}
@@ -61,7 +60,7 @@ func TestCreditNoteIsolationHistoricalAndReorg(t *testing.T) {
 			if v, e := c.CreditState(ctx, state, 10); e != nil || v == nil || len(v.State.Deliveries) != 2 || len(v.Membership.Siblings) != 16 {
 				t.Fatalf("state lookup: %+v %v", v, e)
 			}
-			b2 := model.Batch{Block: model.Block{Number: 11, Hash: common.HexToHash("11"), ParentHash: b.Block.Hash}, Nullifiers: []common.Hash{noteNull}, CreditNullifiers: []common.Hash{creditNull}, Events: []model.Event{{Name: "CreditRevoked", Data: []byte(fmt.Sprintf(`{"owner":%q,"token":%q,"shard":1,"slot":0}`, owner.Hex(), token.Hex()))}}}
+			b2 := model.Batch{Block: model.Block{Number: 11, Hash: common.HexToHash("11"), ParentHash: b.Block.Hash}, Nullifiers: []common.Hash{noteNull}, CreditNullifiers: []common.Hash{creditNull}, Events: []model.Event{{Name: "CreditRevoked", Data: []byte(fmt.Sprintf(`{"owner":%q,"token":%q,"grantId":"1"}`, owner.Hex(), token.Hex()))}}}
 			if e := s.Apply(ctx, b2); e != nil {
 				t.Fatal(e)
 			}
@@ -80,19 +79,16 @@ func TestCreditNoteIsolationHistoricalAndReorg(t *testing.T) {
 					t.Fatal("mixed nullifier domains")
 				}
 			}
-			if sh, slot, e := c.CreditAllocationAt(ctx, owner, token, 11); e != nil || sh != "1" || slot != 1 {
-				t.Fatalf("allocation %s %d %v", sh, slot, e)
+			if status, e := c.CreditStatusAt(ctx, owner, token, "1", 10); e != nil || status != 1 {
+				t.Fatalf("future revoke %d %v", status, e)
 			}
-			if bits, e := c.CreditBitmapAt(ctx, owner, token, "1", 0, 10); e != nil || bits != "0" {
-				t.Fatal("future revoke")
-			}
-			if bits, e := c.CreditBitmapAt(ctx, owner, token, "1", 0, 11); e != nil || bits != "1" {
-				t.Fatalf("bitmap %s %v", bits, e)
+			if status, e := c.CreditStatusAt(ctx, owner, token, "1", 11); e != nil || status != 2 {
+				t.Fatalf("revoke %d %v", status, e)
 			}
 			if e := s.Rollback(ctx, 10); e != nil {
 				t.Fatal(e)
 			}
-			if bits, e := c.CreditBitmapAt(ctx, owner, token, "1", 0, 11); e != nil || bits != "0" {
+			if status, e := c.CreditStatusAt(ctx, owner, token, "1", 11); e != nil || status != 1 {
 				t.Fatal("revocation survived reorg")
 			}
 			if v, e := c.ConsumedAt(ctx, creditNull, 11, true); e != nil || v {

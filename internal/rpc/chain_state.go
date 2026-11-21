@@ -77,7 +77,7 @@ func (a *API) allowedCall(r ChainStateRequest) bool {
 			return false
 		}
 		switch m.RawName {
-		case "transact", "crossTreeTransact", "shield", "creditAllocation", "creditRevocationBitmap", "creditDraw":
+		case "transact", "crossTreeTransact", "shield", "creditStatus", "creditDraw":
 		default:
 			return false
 		}

@@ -2,6 +2,7 @@
 package protocol
 
 import (
+	"errors"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/invisi-labs/invisi-rpc/internal/model"
@@ -27,6 +28,11 @@ func NewDecoder(context ...sdkprotocol.TransactionContext) (*Decoder, error) {
 	return &Decoder{abi: *a, shared: d}, nil
 }
 func (d *Decoder) Decode(block model.Block, logs []types.Log) (model.Batch, error) {
+	for _, log := range logs {
+		if len(log.Topics) > 0 && legacyCreditTopics[log.Topics[0]] {
+			return model.Batch{}, errors.New("unsupported legacy shard/slot Credit history; index the current Core deployment in a separate database")
+		}
+	}
 	b, e := d.shared.Decode(receipts.Block{Timestamp: block.Timestamp, Number: block.Number, Hash: block.Hash, ParentHash: block.ParentHash}, logs)
 	if e != nil {
 		return model.Batch{}, e

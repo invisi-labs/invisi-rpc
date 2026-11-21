@@ -4,7 +4,8 @@
 
 - Persist complete original headers with indexed blocks and portable snapshots; serve bounded, deployment-pinned historical header ranges without repeat upstream reads. Backfill legacy history atomically without resetting indexed state, and preserve live canonical/finality, consumption, revocation and reorg checks.
 
-- Update the event-schema fingerprint while preserving restore support for the previous unified snapshot format and its historical administrative events.
+- Replace shard/slot allocation and bitmap methods with canonical uint128 `invisi_getCreditStatus`; index scoped 0/1/2 history, pre-revoke, terminal disabled status and rollback on both SQLite and PostgreSQL.
+- Require index/snapshot format 4 and the current Core ABI fingerprint. Refuse legacy shard/slot databases, snapshots and event history explicitly; reset/recreate development indexes for the newly deployed Core.
 - Follow the latest sibling Go SDK source cohort for the planned v1.3.3 compatibility update, including the Core ABI without address-screening hooks. Keep source recognition, authorization and proof semantics unchanged.
 
 ## 1.3.1
