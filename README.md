@@ -125,6 +125,8 @@ GOWORK=off go build ./...
 
 Keep both repositories as siblings. The module listing must show a local `Replace.Dir`; a registry download is not a substitute for this development source. Existing ignored workspaces are optional; `GOWORK=off` still uses the committed local SDK replacements.
 
+The SDK's lazy recursive verification-key loading is confined to its prover module. RPC imports the public protocol modules and does not construct a prover or aggregator, implement `VerificationKeyLoader`, or provision recursive key assets. No RPC configuration or resource download is needed for that SDK change. Event decoding, public API responses, indexed history and snapshot compatibility retain their existing contracts; lazy key loading does not change their formats.
+
 Container builds also require the SDK source context:
 
 ```sh
