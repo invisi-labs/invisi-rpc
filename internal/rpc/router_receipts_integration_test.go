@@ -94,6 +94,10 @@ func TestRouterExecutedCoreReceipts(t *testing.T) {
 				t.Fatalf("public executed Note projection: %+v %v", notes, err)
 			}
 			deposit, fee := false, false
+			fundingPayer := c.Expected.Router
+			if c.Transaction.To() != nil && *c.Transaction.To() == dep.Protocol {
+				fundingPayer = c.Expected.Player
+			}
 			feeRecipient := c.Expected.FeeRecipient
 			if feeRecipient == (common.Address{}) {
 				feeRecipient = c.Expected.Broadcaster
@@ -111,7 +115,7 @@ func TestRouterExecutedCoreReceipts(t *testing.T) {
 					if err := json.Unmarshal(event.Data, &v); err != nil {
 						t.Fatal(err)
 					}
-					if v.Payer != c.Expected.Router || v.Amount != c.Expected.FundingAmount {
+					if v.Payer != fundingPayer || v.Amount != c.Expected.FundingAmount {
 						t.Fatalf("Core funding facts: %+v", v)
 					}
 					deposit = true
