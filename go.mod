@@ -5,12 +5,12 @@ go 1.26.1
 require (
 	github.com/consensys/gnark-crypto v0.19.2
 	github.com/ethereum/go-ethereum v1.17.2
-	github.com/invisi-labs/invisi-sdk-go/protocol v1.3.2
+	github.com/invisi-labs/invisi-sdk-go/protocol v1.3.3
 	github.com/jackc/pgx/v5 v5.11.0
 	modernc.org/sqlite v1.61.0
 )
 
-require github.com/invisi-labs/invisi-sdk-go/primitives v1.3.2 // indirect
+require github.com/invisi-labs/invisi-sdk-go/primitives v1.3.3 // indirect
 
 require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
@@ -51,16 +51,4 @@ require (
 	modernc.org/libc v1.79.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
-)
-
-// Development source cohort for the planned v1.3.3 release.
-replace (
-	github.com/invisi-labs/invisi-sdk-go => ../invisi-sdk-go
-	github.com/invisi-labs/invisi-sdk-go/ipp => ../invisi-sdk-go/ipp
-	github.com/invisi-labs/invisi-sdk-go/paymentrouter => ../invisi-sdk-go/paymentrouter
-	github.com/invisi-labs/invisi-sdk-go/primitives => ../invisi-sdk-go/primitives
-	github.com/invisi-labs/invisi-sdk-go/protocol => ../invisi-sdk-go/protocol
-	github.com/invisi-labs/invisi-sdk-go/prover => ../invisi-sdk-go/prover
-	github.com/invisi-labs/invisi-sdk-go/rpc => ../invisi-sdk-go/rpc
-	github.com/invisi-labs/invisi-sdk-go/session => ../invisi-sdk-go/session
 )

@@ -1,12 +1,24 @@
 # Changelog
 
-## Unreleased
+## 1.3.2
 
-- Persist complete original headers with indexed blocks and portable snapshots; serve bounded, deployment-pinned historical header ranges without repeat upstream reads. Backfill legacy history atomically without resetting indexed state, and preserve live canonical/finality, consumption, revocation and reorg checks.
+### Credit identity and API compatibility
 
-- Replace shard/slot allocation and bitmap methods with canonical uint128 `invisi_getCreditStatus`; index scoped 0/1/2 history, pre-revoke, terminal disabled status and rollback on both SQLite and PostgreSQL.
-- Require index/snapshot format 4 and the current Core ABI fingerprint. Refuse legacy shard/slot databases, snapshots and event history explicitly; reset/recreate development indexes for the newly deployed Core.
-- Follow the latest sibling Go SDK source cohort for the planned v1.3.3 compatibility update, including the Core ABI without address-screening hooks. Keep source recognition, authorization and proof semantics unchanged.
+- Replace shard/slot allocation and revocation bitmaps with positive uint128 `grantId` values, represented as canonical decimal strings. Add `invisi_getCreditStatus(owner, token, grantId, atBlock)` with canonical block metadata and status 0 (unknown), 1 (active), or 2 (permanently disabled); remove the retired allocation and bitmap methods.
+- Persist and reconstruct grant transitions at their exact canonical block on SQLite and PostgreSQL. Support pre-revocation, permanent non-reuse and rollback; index fee-free zero-token pre-revocations without stalling checkpoint progress, while retaining nonzero-owner and paid-operation validation.
+- Require index/snapshot format 4 and the current Core ABI fingerprint. Reject legacy shard/slot databases, snapshots and events explicitly. Recreate development indexes from the newly deployed Core's configured start block; old shard/slot values cannot be converted into grant IDs automatically. Protocol/API version remains 1.
+
+### Historical headers and wallet synchronization
+
+- Add `invisi_getBlockHeaders` for inclusive ranges of 1–256 complete original Ethereum headers, with deployment, ordering, range-anchor and full header-hash checks. Persist headers atomically with indexed blocks, including empty blocks, and retain them in portable snapshots.
+- Backfill missing historical headers in bounded upstream batches after checking saved block identity, a fresh terminal header and the durable finality fence. Backfill does not replay events or change checkpoints, spending state or grant history; rollback removes orphaned headers with their blocks.
+- Serve warm historical ranges from a consistent database snapshot without repeat upstream reads. Cached history is not a live canonicality assertion: SDK clients still perform fresh anchor/finality checks. Only explicit unsupported-method or unavailable-history responses permit compatibility fallback.
+
+### Router paths, dependencies and packaging
+
+- Validate Core event indexing through direct, Router and sponsored execution paths while retaining the actual Core payer. RPC continues to index the Core contract; outer transaction senders and upstream swap sources are separate from the Core funding payer.
+- Upgrade consumed Go SDK modules to published v1.3.3, including the current Core/Factory bindings. Remove committed local replacements and Docker SDK-source mounts so standalone builds resolve the published dependency cohort. RPC needs no proving resources or prover runtime.
+- Refresh operator/API compatibility references and remove the obsolete root configuration template. Existing development databases must follow the format-4 reset requirement above.
 
 ## 1.3.1
 

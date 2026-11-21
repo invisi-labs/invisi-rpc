@@ -4,9 +4,9 @@ ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN --mount=type=bind,from=invisi_sdk_go,target=/invisi-sdk-go,readonly go mod download
+RUN go mod download
 COPY . .
-RUN --mount=type=bind,from=invisi_sdk_go,target=/invisi-sdk-go,readonly CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -o /invisi-rpc ./cmd
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -o /invisi-rpc ./cmd
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /invisi-rpc /invisi-rpc

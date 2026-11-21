@@ -111,11 +111,11 @@ The project, CLI and future release artifacts use `invisi-rpc`. New installation
 
 ## GitHub namespace migration
 
-The source uses `github.com/invisi-labs` and the local SDK development cohort described below. Container workflows target `ghcr.io/invisi-labs`. No image, binary or deployment is published by local development commits.
+The source uses the published Go SDK v1.3.3 modules under `github.com/invisi-labs`. Container workflows target `ghcr.io/invisi-labs`.
 
 ## Local SDK development
 
-This development tree follows the sibling `../invisi-sdk-go` checkout through committed relative `go.mod` replacements. All SDK modules resolve to the same local source cohort, including transitive imports. The published baseline requirements are v1.3.2; the next planned SDK release is v1.3.3, which is not tagged or published by this change.
+Release and standalone builds resolve the published Go SDK v1.3.3 modules. No sibling SDK checkout, committed module replacements or named Docker build context is required.
 
 ```sh
 GOWORK=off go list -m -json github.com/invisi-labs/invisi-sdk-go/protocol
@@ -123,17 +123,15 @@ GOWORK=off go test ./...
 GOWORK=off go build ./...
 ```
 
-Keep both repositories as siblings. The module listing must show a local `Replace.Dir`; a registry download is not a substitute for this development source. Existing ignored workspaces are optional; `GOWORK=off` still uses the committed local SDK replacements.
+The module listing must report version `v1.3.3` without a local replacement. For SDK source development, use an optional ignored `go.work` containing the service and the SDK modules being edited. Keep machine-specific workspace paths uncommitted and use `GOWORK=off` to verify release dependencies.
 
-The SDK's lazy recursive verification-key loading is confined to its prover module. RPC imports the public protocol modules and does not construct a prover or aggregator, implement `VerificationKeyLoader`, or provision recursive key assets. No RPC configuration or resource download is needed for that SDK change. Event decoding, public API responses, indexed history and snapshot compatibility retain their existing contracts; lazy key loading does not change their formats.
-
-Container builds also require the SDK source context:
+Container builds use the published modules:
 
 ```sh
-docker buildx build --build-context invisi_sdk_go=../invisi-sdk-go -t invisi-rpc:local .
+docker buildx build -t invisi-rpc:local .
 ```
 
-The source is mounted read-only during Go build stages. Standalone release builds must be switched to the published v1.3.3 cohort after that SDK release; this local-source stage does not publish binaries or images.
+RPC imports public protocol modules and does not construct a prover or download proving resources. The SDK verification-key changes require no additional RPC configuration.
 
 
 Current Credit indexing follows the committed SDK uint128 grant-ID ABI: `invisi_getCreditStatus(owner, token, decimalGrantId, atBlock)` returns canonical block metadata and status 0 (unknown), 1 (active), or 2 (permanently disabled). IDs are positive canonical decimal strings, scoped by chain, Core, owner and token; pre-revoke is supported and IDs cannot be reused. Fee-free zero-token pre-revocations are indexed and queryable without blocking checkpoint progress; grant owners remain nonzero. The retired allocation and bitmap endpoints are removed. Protocol/API version remains 1.
