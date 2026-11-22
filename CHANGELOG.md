@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.4
+
+- Guard single-block and range publication against the durable finalized anchor inside the writer transaction, reject rollback across accepted finalized history, and persist conflict fences even before the first anchor. Safe and finalized Note confirmations fail closed while an anchor or fence cannot be verified.
+- Advance finalized anchors only when their complete block identity matches the indexed branch. Reconcile optimistic reorgs first; retry checkpoint/generation races, unaccepted range heads and wrong-height upstream anchor responses without creating a permanent conflict fence.
+- Align the receiving Registry read gateway with the generated SDK ABI: accept canonical `isRegistered(bytes32)`, `nonceOf(bytes32)` and `receivingKeysOf(bytes32)` calls plus `CHAIN_ID()`. Preserve the full wallet-identity domain and reject noncanonical calldata; indexed receiving-address queries retain their existing owner-address input.
+- Add branch and pull-request validation for Go vet/tests, PostgreSQL fixtures and clean committed-source Linux amd64/arm64 container builds with CLI and license smoke checks.
+- Build release archives and images with the selected tag's own release script and Dockerfile, including manual publishing, so artifacts remain aligned with their source tag.
+- Upgrade the consumed Go SDK protocol and primitives modules to published v1.3.4, using verified public module checksums without local workspace replacements. This includes canonical zero-token Credit status support; existing protocol ABI and proving resources remain unchanged.
+- Protocol/API version remains 1; retain existing indexes and durable finality state. A persisted finalized-history conflict still requires the documented operator investigation and recovery.
+
 ## 1.3.3
 
 - Preserve canonical ABI field names, including uint128 `grantId`, when reconstructing receipt-bound Credit settlement calldata. Valid batch draws across different owners and Credit updates can be queried without rejection.

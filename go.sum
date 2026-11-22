@@ -101,10 +101,10 @@ github.com/holiman/uint256 v1.3.2 h1:a9EgMPSC1AAaj1SZL5zIQD3WbwTuHrMGOerLjGmM/TA
 github.com/holiman/uint256 v1.3.2/go.mod h1:EOMSn4q6Nyt9P6efbI3bueV4e1b3dGlUCXeiRV4ng7E=
 github.com/huin/goupnp v1.3.0 h1:UvLUlWDNpoUdYzb2TCn+MuTWtcjXKSza2n6CBdQ0xXc=
 github.com/huin/goupnp v1.3.0/go.mod h1:gnGPsThkYa7bFi/KWmEysQRf48l2dvR5bxr2OFckNX8=
-github.com/invisi-labs/invisi-sdk-go/primitives v1.3.3 h1:ASUIsdYdgTIjRbU3yK1R+5U3YINkgBLnnf5AfJbehAw=
-github.com/invisi-labs/invisi-sdk-go/primitives v1.3.3/go.mod h1:o/3YZx7hY1cppzc7vjkKRFzJb/lYFBnhUsfN8R2UzFw=
-github.com/invisi-labs/invisi-sdk-go/protocol v1.3.3 h1:kGgiTwrKXbV17HCxXWwgBac/0gdEQ1tcYfw8seKnqKo=
-github.com/invisi-labs/invisi-sdk-go/protocol v1.3.3/go.mod h1:7jqN0MnVRAX20Y/7/SYX9+wJocG5y6zIJa0634DxlCI=
+github.com/invisi-labs/invisi-sdk-go/primitives v1.3.4 h1:bDDG6C4Ntl5uTkzg0vgeBzv9oVk0+Cw8xVSlx5j8uCE=
+github.com/invisi-labs/invisi-sdk-go/primitives v1.3.4/go.mod h1:o/3YZx7hY1cppzc7vjkKRFzJb/lYFBnhUsfN8R2UzFw=
+github.com/invisi-labs/invisi-sdk-go/protocol v1.3.4 h1:bfYGUDQcdljpOY4GegfsOxq4B0lVIwiwpBIpwcUJfcU=
+github.com/invisi-labs/invisi-sdk-go/protocol v1.3.4/go.mod h1:nm9Niw0CJSEwPlBawKbTe8Y9u2ngT4c3guo4l/qKVvU=
 github.com/jackc/pgpassfile v1.0.0 h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsIM=
 github.com/jackc/pgpassfile v1.0.0/go.mod h1:CEx0iS5ambNFdcRtxPj5JhEz+xB6uRky5eyVu/W2HEg=
 github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 h1:iCEnooe7UlwOQYpKFhBabPMi4aNAfoODPEFNiAnClxo=

@@ -40,11 +40,6 @@ jobs:
           fi
           echo "value=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Check out image packaging
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
       - name: Check out tagged source
         id: source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -67,7 +62,7 @@ jobs:
 
       - name: Build release binaries
         working-directory: source
-        run: ../scripts/build-release.sh "$RELEASE_TAG" ../release-assets
+        run: ./scripts/build-release.sh "$RELEASE_TAG" ../release-assets
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -84,7 +79,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: source
-          file: Dockerfile
+          file: source/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.IMAGE }}:${{ steps.version.outputs.value }}
