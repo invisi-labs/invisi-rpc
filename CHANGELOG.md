@@ -7,7 +7,7 @@
 - Align the receiving Registry read gateway with the generated SDK ABI: accept canonical `isRegistered(bytes32)`, `nonceOf(bytes32)` and `receivingKeysOf(bytes32)` calls plus `CHAIN_ID()`. Preserve the full wallet-identity domain and reject noncanonical calldata; indexed receiving-address queries retain their existing owner-address input.
 - Add branch and pull-request validation for Go vet/tests, PostgreSQL fixtures and clean committed-source Linux amd64/arm64 container builds with CLI and license smoke checks.
 - Build release archives and images with the selected tag's own release script and Dockerfile, including manual publishing, so artifacts remain aligned with their source tag.
-- Upgrade the consumed Go SDK protocol and primitives modules to published v1.3.4, using verified public module checksums without local workspace replacements. This includes canonical zero-token Credit status support; existing protocol ABI and proving resources remain unchanged.
+- Upgrade the consumed Go SDK protocol and primitives modules to published v1.3.4, using verified public module checksums without local workspace replacements. Existing protocol ABI and proving resources remain unchanged.
 - Protocol/API version remains 1; retain existing indexes and durable finality state. A persisted finalized-history conflict still requires the documented operator investigation and recovery.
 
 ## 1.3.3
