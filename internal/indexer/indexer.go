@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/invisi-labs/invisi-rpc/internal/finality"
 	"github.com/invisi-labs/invisi-rpc/internal/model"
 )
 
@@ -115,7 +116,7 @@ func (i *Indexer) step(ctx context.Context, finalityChecked bool) (bool, error) 
 			if cp.Number <= i.Deployment.IndexFromBlock() {
 				return false, errors.New("chain head precedes deployment; verify deployment before reset")
 			}
-			if err = i.Store.Rollback(ctx, cp.Number-1); err != nil {
+			if err = i.rollback(ctx, cp.Number-1); err != nil {
 				return false, err
 			}
 			cp, err = i.Store.Checkpoint(ctx)
@@ -138,7 +139,7 @@ func (i *Indexer) step(ctx context.Context, finalityChecked bool) (bool, error) 
 			return false, errors.New("deployment starting block was reorganized; reset database after verifying deployment")
 		}
 		ancestor := cp.Number - 1
-		if err = i.Store.Rollback(ctx, ancestor); err != nil {
+		if err = i.rollback(ctx, ancestor); err != nil {
 			return false, err
 		}
 		cp, err = i.Store.Checkpoint(ctx)
@@ -204,8 +205,95 @@ func (i *Indexer) step(ctx context.Context, finalityChecked bool) (bool, error) 
 	if current.Hash() != hash {
 		return false, errors.New("chain changed during indexing; retry")
 	}
-	if err = i.Store.Apply(ctx, b); err != nil {
+	if err = i.apply(ctx, b); err != nil {
 		return false, fmt.Errorf("apply block %d: %w", next, err)
 	}
 	return true, nil
+}
+
+// publish holds the finality permit only across a store mutation. Network reads
+// and Check must remain outside it: a concurrent API read may persist a fence.
+func (i *Indexer) publish(ctx context.Context, write func() error) error {
+	if fin, ok := i.Finality.(interface {
+		AcquirePublication(context.Context) (func(), error)
+	}); ok {
+		release, err := fin.AcquirePublication(ctx)
+		if err != nil {
+			return err
+		}
+		defer release()
+	}
+	return write()
+}
+
+func (i *Indexer) apply(ctx context.Context, b model.Batch) error {
+	fin, ok := i.Finality.(interface {
+		AcquirePublication(context.Context) (func(), error)
+	})
+	if !ok {
+		return i.Store.Apply(ctx, b)
+	}
+	guard := func(ctx context.Context) (func(), error) {
+		if validator, ok := i.Finality.(interface {
+			ValidatePublication(context.Context, model.Block) error
+		}); ok {
+			if err := validator.ValidatePublication(ctx, b.Block); err != nil {
+				return nil, err
+			}
+		}
+		return fin.AcquirePublication(ctx)
+	}
+	var err error
+	if store, ok := i.Store.(rangeStoreWriter); ok {
+		// Root validation and anchor network checks run before the publication permit.
+		err = store.ApplyRange(ctx, []model.Batch{b}, guard)
+	} else {
+		var release func()
+		release, err = guard(ctx)
+		if err == nil {
+			err = i.Store.Apply(ctx, b)
+			release()
+		}
+	}
+	// A transaction must finish rolling back before Fence persists through the
+	// store writer. Preserve directly observed conflicts even if the provider recovers.
+	if errors.Is(err, finality.ErrFinalityConflict) {
+		if fence, ok := i.Finality.(interface{ Fence(context.Context) error }); ok {
+			fenceCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer cancel()
+			if persistErr := fence.Fence(fenceCtx); persistErr != nil {
+				return fmt.Errorf("%w: persist publication conflict: %v", err, persistErr)
+			}
+		}
+	}
+	return err
+}
+
+func (i *Indexer) rollback(ctx context.Context, ancestor uint64) error {
+	if fin, ok := i.Finality.(interface {
+		AcquireRollback(context.Context, uint64) (func(), error)
+	}); ok {
+		guard := func(ctx context.Context) (func(), error) { return fin.AcquireRollback(ctx, ancestor) }
+		var err error
+		if store, ok := i.Store.(interface {
+			RollbackGuarded(context.Context, uint64, func(context.Context) (func(), error)) error
+		}); ok {
+			err = store.RollbackGuarded(ctx, ancestor, guard)
+		} else {
+			var release func()
+			release, err = guard(ctx)
+			if err == nil {
+				err = i.Store.Rollback(ctx, ancestor)
+				release()
+			}
+		}
+		if errors.Is(err, finality.ErrFinalizedRollback) {
+			// The writer transaction and permit are released before any network reads.
+			if checkErr := i.Finality.Check(ctx); checkErr != nil {
+				return checkErr
+			}
+		}
+		return err
+	}
+	return i.publish(ctx, func() error { return i.Store.Rollback(ctx, ancestor) })
 }

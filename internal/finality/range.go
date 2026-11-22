@@ -86,3 +86,40 @@ func (r *Reader) setRangeFence() {
 	r.rangeFence.Store(true)
 	r.publicationMu.Unlock()
 }
+
+// AcquireRollback also prevents removing an accepted finalized block when the
+// indexer's network reads observe a reorg before an API read has fenced it.
+func (r *Reader) AcquireRollback(ctx context.Context, ancestor uint64) (func(), error) {
+	release, err := r.AcquirePublication(ctx)
+	if err != nil {
+		return nil, err
+	}
+	anchor := r.protectedAnchor
+	if anchor == nil || ancestor >= anchor.Number {
+		return release, nil
+	}
+	// A height bound alone does not prove a hash conflict: the provider may
+	// temporarily lag behind an accepted anchor. Let the caller recheck finality
+	// after releasing this permit, and fence only a verified history conflict.
+	release()
+	return nil, ErrFinalizedRollback
+}
+
+// ValidatePublication verifies the accepted finalized history without Reader.mu
+// or store access. It is safe inside a writer transaction, before taking a permit.
+func (r *Reader) ValidatePublication(ctx context.Context, block model.Block) error {
+	r.publicationMu.Lock()
+	var anchor *model.Block
+	if r.protectedAnchor != nil {
+		copy := *r.protectedAnchor
+		anchor = &copy
+	}
+	r.publicationMu.Unlock()
+	if anchor == nil {
+		return nil
+	}
+	if block.Number == anchor.Number && !same(anchor, &block) {
+		return ErrFinalityConflict
+	}
+	return r.ValidateAnchor(ctx, *anchor)
+}

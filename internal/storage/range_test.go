@@ -2,8 +2,10 @@ package storage
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -11,6 +13,8 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/invisi-labs/invisi-rpc/internal/finality"
 	"github.com/invisi-labs/invisi-rpc/internal/model"
 )
 
@@ -158,5 +162,114 @@ func TestApplyRangeMatchesSequentialHistory(t *testing.T) {
 				t.Fatal("rollback retained nullifier", e)
 			}
 		})
+	}
+}
+
+func TestRollbackGuardRunsBeforeCommitAndReleasesAfterTransaction(t *testing.T) {
+	for _, backend := range []string{"sqlite", "postgres"} {
+		t.Run(backend, func(t *testing.T) {
+			for _, reject := range []bool{false, true} {
+				t.Run(fmt.Sprintf("reject_%t", reject), func(t *testing.T) {
+					s := openRangeBackend(t, backend)
+					ctx := context.Background()
+					b10 := model.Batch{Block: model.Block{Number: 10, Hash: common.HexToHash("10")}}
+					b11 := model.Batch{Block: model.Block{Number: 11, Hash: common.HexToHash("11"), ParentHash: b10.Block.Hash}}
+					for _, b := range []model.Batch{b10, b11} {
+						if err := s.Apply(ctx, b); err != nil {
+							t.Fatal(err)
+						}
+					}
+					guarded, ok := s.(interface {
+						RollbackGuarded(context.Context, uint64, func(context.Context) (func(), error)) error
+					})
+					if !ok {
+						t.Fatal("store cannot guard rollback at commit")
+					}
+					called, released := false, false
+					guardErr := errors.New("finality fenced")
+					err := guarded.RollbackGuarded(ctx, 10, func(context.Context) (func(), error) {
+						called = true
+						return func() {
+								released = true
+								cp, err := s.Checkpoint(ctx)
+								want := uint64(10)
+								if reject {
+									want = 11
+								}
+								if err != nil || cp == nil || cp.Number != want {
+									t.Errorf("permit released before transaction ended: cp=%+v err=%v", cp, err)
+								}
+							}, func() error {
+								if reject {
+									return guardErr
+								}
+								return nil
+							}()
+					})
+					if !called || !released || errors.Is(err, guardErr) != reject {
+						t.Fatalf("rollback guard not honored: called=%v released=%v err=%v", called, released, err)
+					}
+				})
+			}
+		})
+	}
+}
+
+type rollbackFinalityRPC struct{ header *types.Header }
+
+func (r rollbackFinalityRPC) CallContext(_ context.Context, out any, _ string, _ ...any) error {
+	raw, err := json.Marshal(r.header)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, out)
+}
+func TestRollbackGuardChecksDurableFinalityBeyondReaderCache(t *testing.T) {
+	for _, backend := range []string{"sqlite", "postgres"} {
+		for _, kind := range []string{"anchor_advanced", "fenced"} {
+			t.Run(backend+"/"+kind, func(t *testing.T) {
+				ctx := context.Background()
+				s := openRangeBackend(t, backend)
+				h9 := &types.Header{Number: big.NewInt(9), Difficulty: big.NewInt(0)}
+				a9 := model.Block{Number: 9, Hash: h9.Hash()}
+				b10 := model.Batch{Block: model.Block{Number: 10, Hash: common.HexToHash("10"), ParentHash: a9.Hash}}
+				if err := s.Apply(ctx, b10); err != nil {
+					t.Fatal(err)
+				}
+				if err := s.SaveFinalizedAnchor(ctx, a9); err != nil {
+					t.Fatal(err)
+				}
+				reader := &finality.Reader{RPC: rollbackFinalityRPC{h9}, Store: s}
+				if err := reader.Check(ctx); err != nil {
+					t.Fatal(err)
+				}
+				// Another process advances or fences the shared deployment after Check.
+				if kind == "anchor_advanced" {
+					if err := s.SaveFinalizedAnchor(ctx, b10.Block); err != nil {
+						t.Fatal(err)
+					}
+				} else if err := s.MarkFinalityConflict(ctx); err != nil {
+					t.Fatal(err)
+				}
+				guarded, ok := s.(interface {
+					RollbackGuarded(context.Context, uint64, func(context.Context) (func(), error)) error
+				})
+				if !ok {
+					t.Fatal("missing guarded rollback")
+				}
+				err := guarded.RollbackGuarded(ctx, 9, func(ctx context.Context) (func(), error) { return reader.AcquireRollback(ctx, 9) })
+				want := model.ErrFinalizedRollback
+				if kind == "fenced" {
+					want = model.ErrFinalityConflict
+				}
+				if !errors.Is(err, want) {
+					t.Fatalf("durable finality guard returned unrecognized error: got=%v want=%v", err, want)
+				}
+				cp, err := s.Checkpoint(ctx)
+				if err != nil || cp == nil || cp.Number != 10 {
+					t.Fatalf("durable finalized history was deleted: cp=%+v error=%v", cp, err)
+				}
+			})
+		}
 	}
 }

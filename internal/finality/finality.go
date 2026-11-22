@@ -39,15 +39,17 @@ type AnchorStore interface {
 	MarkFinalityConflict(context.Context) error
 }
 type Reader struct {
-	RPC           RPC
-	Store         AnchorStore
-	mu            sync.Mutex
-	conflicted    bool
-	rangeFence    atomic.Bool
-	publicationMu sync.Mutex
+	RPC             RPC
+	Store           AnchorStore
+	mu              sync.Mutex
+	conflicted      bool
+	rangeFence      atomic.Bool
+	publicationMu   sync.Mutex
+	protectedAnchor *model.Block // protected by publicationMu; never read the store under this lock
 }
 
-var ErrFinalityConflict = errors.New("accepted finalized history conflict; operator recovery required")
+var ErrFinalityConflict = model.ErrFinalityConflict
+var ErrFinalizedRollback = model.ErrFinalizedRollback
 
 func (r *Reader) header(ctx context.Context, tag string) Head {
 	var raw json.RawMessage
@@ -109,7 +111,14 @@ func (r *Reader) sample(ctx context.Context) (Snapshot, Snapshot) {
 	}
 	return out, observed
 }
-func (r *Reader) read(ctx context.Context) (Snapshot, error) {
+func (r *Reader) read(ctx context.Context) (out Snapshot, err error) {
+	// Safe confirmations also depend on the accepted finalized history. A failed
+	// fence/anchor check must fail closed for both selectors, including store errors.
+	defer func() {
+		if err != nil {
+			out.Safe = Head{Status: out.Finalized.Status}
+		}
+	}()
 	out, observed := r.sample(ctx)
 	observedFinalized := observed.Finalized.Block
 	observedLatest := observed.Latest.Block
@@ -121,6 +130,10 @@ func (r *Reader) read(ctx context.Context) (Snapshot, error) {
 			observedFinalized = observedRetry.Finalized.Block
 		}
 	}
+	if r.conflicted || r.rangeFence.Load() {
+		invalidate(&out.Finalized)
+		return out, ErrFinalityConflict
+	}
 	if r.Store == nil {
 		return out, nil
 	}
@@ -129,7 +142,7 @@ func (r *Reader) read(ctx context.Context) (Snapshot, error) {
 		out.Finalized = Head{Status: "unavailable"}
 		return out, fenceErr
 	}
-	if fenced || r.conflicted || r.rangeFence.Load() {
+	if fenced {
 		r.setRangeFence()
 		invalidate(&out.Finalized)
 		return out, ErrFinalityConflict
@@ -140,6 +153,7 @@ func (r *Reader) read(ctx context.Context) (Snapshot, error) {
 		return out, err
 	}
 	if anchor != nil {
+		r.protectAnchor(*anchor)
 		canonical := r.header(ctx, hexutil.EncodeUint64(anchor.Number))
 		if canonical.Block == nil {
 			out.Finalized = Head{Status: canonical.Status}
@@ -164,10 +178,18 @@ func (r *Reader) read(ctx context.Context) (Snapshot, error) {
 		}
 	}
 	if out.Finalized.Block != nil && (anchor == nil || !same(anchor, out.Finalized.Block)) {
+		// Publish the rollback bound before persistence, closing the save-to-cache
+		// window without holding a publication permit while waiting for a DB writer.
+		// A failed save conservatively retains this verified native finalized bound.
+		r.protectAnchor(*out.Finalized.Block)
 		if err = r.Store.SaveFinalizedAnchor(ctx, *out.Finalized.Block); err != nil {
 			out.Finalized = Head{Status: "unavailable"}
 			return out, err
 		}
+	}
+	if r.rangeFence.Load() {
+		invalidate(&out.Finalized)
+		return out, ErrFinalityConflict
 	}
 	return out, nil
 }
@@ -187,4 +209,14 @@ func (r *Reader) Check(ctx context.Context) error {
 		return errors.New("inconsistent native latest header")
 	}
 	return err
+}
+
+// protectAnchor publishes persisted or verified native finalized history before
+// a database write. It never waits for the database under the publication lock.
+func (r *Reader) protectAnchor(anchor model.Block) {
+	r.publicationMu.Lock()
+	if r.protectedAnchor == nil || anchor.Number > r.protectedAnchor.Number {
+		r.protectedAnchor = &anchor
+	}
+	r.publicationMu.Unlock()
 }

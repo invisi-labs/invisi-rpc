@@ -455,6 +455,12 @@ func (s *SQLiteStore) insert(ctx context.Context, tx *sqliteTx, block, sequence 
 	return err
 }
 func (s *SQLiteStore) Rollback(ctx context.Context, ancestor uint64) error {
+	return s.RollbackGuarded(ctx, ancestor, nil)
+}
+
+// RollbackGuarded acquires a publication permit only after the writer transaction
+// is ready to commit. Its release runs after commit or rollback completes.
+func (s *SQLiteStore) RollbackGuarded(ctx context.Context, ancestor uint64, guard func(context.Context) (func(), error)) error {
 	if ancestor > math.MaxInt64 {
 		return errors.New("ancestor out of range")
 	}
@@ -462,10 +468,36 @@ func (s *SQLiteStore) Rollback(ctx context.Context, ancestor uint64) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	var release func()
+	defer func() {
+		_ = tx.Rollback(ctx)
+		if release != nil {
+			release()
+		}
+	}()
 	_, err = tx.Exec(ctx, "DELETE FROM invisi_blocks WHERE deployment=?1 AND number>?2", s.key, ancestor)
 	if err != nil {
 		return err
+	}
+	if guard != nil {
+		// The writer transaction serializes this deployment's durable anchor with
+		// rollback, including anchors/fences published by another process or Reader.
+		var raw []byte
+		var conflicted int
+		queryErr := tx.QueryRow(ctx, "SELECT block,conflicted FROM invisi_finalized_anchors WHERE deployment=?1", s.key).Scan(&raw, &conflicted)
+		anchor, anchorErr := decodeAnchor(raw, queryErr)
+		if anchorErr != nil {
+			return anchorErr
+		}
+		if conflicted != 0 {
+			return model.ErrFinalityConflict
+		}
+		if anchor != nil && ancestor < anchor.Number {
+			return model.ErrFinalizedRollback
+		}
+		if release, err = guard(ctx); err != nil {
+			return err
+		}
 	}
 	return tx.Commit(ctx)
 }

@@ -231,3 +231,140 @@ func TestMalformedLatestPausesIndexingWithoutFence(t *testing.T) {
 		t.Fatal("malformed latest created permanent fence")
 	}
 }
+
+type failingFenceStore struct {
+	*memoryAnchor
+	fenceErr  error
+	anchorErr error
+}
+
+func (s *failingFenceStore) FinalityConflict(ctx context.Context) (bool, error) {
+	if s.fenceErr != nil {
+		return false, s.fenceErr
+	}
+	return s.memoryAnchor.FinalityConflict(ctx)
+}
+func (s *failingFenceStore) FinalizedAnchor(ctx context.Context) (*model.Block, error) {
+	if s.anchorErr != nil {
+		return nil, s.anchorErr
+	}
+	return s.memoryAnchor.FinalizedAnchor(ctx)
+}
+func TestSafeHeadRespectsPermanentAndUnverifiableFence(t *testing.T) {
+	for _, kind := range []string{"observed_conflict", "restart", "fence_store_error", "anchor_store_error", "memory_fence_store_error", "without_store"} {
+		t.Run(kind, func(t *testing.T) {
+			ctx := context.Background()
+			r, f, s := testReader()
+			r.Read(ctx)
+			store := &failingFenceStore{memoryAnchor: s}
+			r.Store = store
+			want := "inconsistent"
+			switch kind {
+			case "observed_conflict", "restart":
+				original := f.headers["0x6"]
+				changed := types.CopyHeader(original)
+				changed.Extra = []byte{9}
+				f.headers["0x6"] = changed
+				got := r.Read(ctx)
+				if got.Safe.Status != "inconsistent" || got.Safe.Block != nil {
+					t.Fatalf("safe escaped observed conflict: %+v", got)
+				}
+				f.headers["0x6"] = original
+				if kind == "restart" {
+					r = &Reader{RPC: f, Store: store}
+				}
+			case "fence_store_error":
+				store.fenceErr = errors.New("cannot read fence")
+				want = "unavailable"
+			case "anchor_store_error":
+				store.anchorErr = errors.New("cannot read anchor")
+				want = "unavailable"
+			case "memory_fence_store_error":
+				if err := r.Fence(ctx); err != nil {
+					t.Fatal(err)
+				}
+				store.fenceErr = errors.New("cannot read fence")
+			case "without_store":
+				r.Store = nil
+				if err := r.Fence(ctx); err != nil {
+					t.Fatal(err)
+				}
+			}
+			got := r.Read(ctx)
+			if got.Safe.Status != want || got.Safe.Block != nil || got.Latest.Status != "available" {
+				t.Fatalf("unsafe finality snapshot: %+v want safe %s", got, want)
+			}
+		})
+	}
+}
+func TestSafeOnlyNativeChainRemainsAvailable(t *testing.T) {
+	r, f, _ := testReader()
+	f.failures["finalized"] = rpcError{}
+	got := r.Read(context.Background())
+	if got.Safe.Status != "available" || got.Safe.Block == nil || got.Finalized.Status != "unsupported" {
+		t.Fatal(got)
+	}
+}
+
+type fenceDuringAnchorRPC struct {
+	RPC
+	beforeAnchor func()
+	numericCalls int
+}
+
+func (f *fenceDuringAnchorRPC) CallContext(ctx context.Context, out any, method string, args ...any) error {
+	if args[0] == "0x6" {
+		f.numericCalls++
+		if f.numericCalls == 2 {
+			f.beforeAnchor()
+		}
+	}
+	return f.RPC.CallContext(ctx, out, method, args...)
+}
+func TestSafeHeadObservesFenceDuringAnchorVerification(t *testing.T) {
+	ctx := context.Background()
+	r, f, _ := testReader()
+	r.Read(ctx)
+	r.RPC = &fenceDuringAnchorRPC{RPC: f, beforeAnchor: func() {
+		if err := r.Fence(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}}
+	got := r.Read(ctx)
+	if got.Safe.Status != "inconsistent" || got.Safe.Block != nil || got.Finalized.Status != "inconsistent" {
+		t.Fatalf("fence during anchor verification escaped: %+v", got)
+	}
+}
+
+type afterSaveAnchor struct {
+	memoryAnchor
+	afterSave func()
+}
+
+func (s *afterSaveAnchor) SaveFinalizedAnchor(ctx context.Context, b model.Block) error {
+	if err := s.memoryAnchor.SaveFinalizedAnchor(ctx, b); err != nil {
+		return err
+	}
+	if s.afterSave != nil {
+		s.afterSave()
+	}
+	return nil
+}
+func TestRollbackCannotEnterPersistedAnchorPublicationWindow(t *testing.T) {
+	ctx := context.Background()
+	r, _, _ := testReader()
+	store := &afterSaveAnchor{}
+	r.Store = store
+	store.afterSave = func() {
+		release, err := r.AcquireRollback(ctx, 5)
+		if release != nil {
+			release()
+		}
+		if !errors.Is(err, ErrFinalizedRollback) {
+			t.Fatalf("rollback crossed newly persisted finalized anchor before cache publication: %v", err)
+		}
+	}
+	if err := r.Check(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
