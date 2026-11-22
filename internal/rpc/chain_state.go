@@ -89,12 +89,26 @@ func (a *API) allowedCall(r ChainStateRequest) bool {
 		return e == nil && bytes.Equal(canonical, r.Data[4:])
 	}
 	if a.Deployment.Registry != nil && r.Address == a.Deployment.Registry.Address {
-		for sig, n := range map[string]int{"isRegistered(address)": 1, "nonceOf(address)": 1, "receivingKeysOf(address)": 1, "CHAIN_ID()": 0} {
-			if selector(r.Data, sig, n) {
-				return true
-			}
+		ab, err := contracts.InvisiAddressRegistryMetaData.GetAbi()
+		if err != nil {
+			return false
 		}
-		return false
+		m, err := ab.MethodById(r.Data[:4])
+		if err != nil || m.StateMutability != "view" {
+			return false
+		}
+		// Keep the gateway's read surface explicit even when the SDK ABI grows.
+		switch m.Sig {
+		case "isRegistered(bytes32)", "nonceOf(bytes32)", "receivingKeysOf(bytes32)", "CHAIN_ID()":
+		default:
+			return false
+		}
+		values, err := m.Inputs.Unpack(r.Data[4:])
+		if err != nil {
+			return false
+		}
+		canonical, err := m.Inputs.Pack(values...)
+		return err == nil && bytes.Equal(canonical, r.Data[4:])
 	}
 	if a.Deployment.BroadcasterRegistry != nil && r.Address == a.Deployment.BroadcasterRegistry.Address {
 		for sig, n := range map[string]int{"broadcasterOf(address)": 1} {
