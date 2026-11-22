@@ -123,3 +123,55 @@ func (r *Reader) ValidatePublication(ctx context.Context, block model.Block) err
 	}
 	return r.ValidateAnchor(ctx, *anchor)
 }
+
+// AcquireValidatedPublication uses the writer's durable anchor, rather than a
+// possibly stale Reader cache. Network calls precede the publication permit.
+func (r *Reader) AcquireValidatedPublication(ctx context.Context, block model.Block, durable *model.Block) (func(), error) {
+	return r.acquireValidatedPublication(ctx, block, durable, false)
+}
+
+// AcquireValidatedRangePublication also checks that the candidate remains within
+// the current native finalized range, without accepting that native head early.
+func (r *Reader) AcquireValidatedRangePublication(ctx context.Context, block model.Block, durable *model.Block) (func(), error) {
+	return r.acquireValidatedPublication(ctx, block, durable, true)
+}
+
+func (r *Reader) acquireValidatedPublication(ctx context.Context, block model.Block, durable *model.Block, requireFinalized bool) (func(), error) {
+	r.publicationMu.Lock()
+	before := r.protectedAnchor
+	r.publicationMu.Unlock()
+	if durable != nil {
+		if err := r.ValidateAnchor(ctx, *durable); err != nil {
+			return nil, err
+		}
+	}
+	if requireFinalized {
+		head := r.header(ctx, "finalized")
+		if head.Block == nil || head.Block.Number < block.Number {
+			return nil, model.ErrFinalityChanged
+		}
+		canonical := r.header(ctx, hexutil.EncodeUint64(head.Block.Number))
+		if canonical.Block == nil || !same(head.Block, canonical.Block) {
+			return nil, model.ErrFinalityChanged
+		}
+	}
+	current := r.header(ctx, hexutil.EncodeUint64(block.Number))
+	if current.Block == nil || !same(current.Block, &block) {
+		return nil, model.ErrFinalityChanged
+	}
+	release, err := r.AcquirePublication(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !equalAnchor(before, r.protectedAnchor) {
+		release()
+		return nil, model.ErrFinalityChanged
+	}
+	return release, nil
+}
+func equalAnchor(a, b *model.Block) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
+}

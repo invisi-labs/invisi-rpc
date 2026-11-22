@@ -244,8 +244,14 @@ func (i *Indexer) apply(ctx context.Context, b model.Batch) error {
 		return fin.AcquirePublication(ctx)
 	}
 	var err error
-	if store, ok := i.Store.(rangeStoreWriter); ok {
-		// Root validation and anchor network checks run before the publication permit.
+	if store, ok := i.Store.(finalityStoreWriter); ok {
+		err = store.ApplyRangeWithFinality(ctx, []model.Batch{b}, func(ctx context.Context, anchor *model.Block) (func(), error) {
+			if reader, ok := i.Finality.(validatedPublisher); ok {
+				return reader.AcquireValidatedPublication(ctx, b.Block, anchor)
+			}
+			return guard(ctx)
+		})
+	} else if store, ok := i.Store.(rangeStoreWriter); ok {
 		err = store.ApplyRange(ctx, []model.Batch{b}, guard)
 	} else {
 		var release func()

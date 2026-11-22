@@ -60,6 +60,9 @@ func TestPublicationSafeConfirmationMustRespectFinalizedFence(t *testing.T) {
 			ctx := context.Background()
 			api, s, chain := confirmedFixture(t)
 			chain.header.Difficulty = big.NewInt(1)
+			first := &types.Header{Number: big.NewInt(8), Time: 121, Difficulty: big.NewInt(1)}
+			second := &types.Header{Number: big.NewInt(9), Time: 122, Difficulty: big.NewInt(1), ParentHash: first.Hash()}
+			chain.header.ParentHash = second.Hash()
 			b := model.Block{Number: 10, Hash: chain.header.Hash(), Timestamp: 123, ParentHash: chain.header.ParentHash}
 			s.head = &b
 			s.lookup.Output.Block = b
@@ -77,6 +80,12 @@ func TestPublicationSafeConfirmationMustRespectFinalizedFence(t *testing.T) {
 					t.Fatal(err)
 				}
 				defer func() { disk.Close() }()
+				for _, h := range []*types.Header{first, second, chain.header} {
+					block := model.Block{Number: h.Number.Uint64(), Hash: h.Hash(), Timestamp: h.Time, ParentHash: h.ParentHash}
+					if err := disk.Apply(ctx, model.Batch{Block: block, Header: h}); err != nil {
+						t.Fatal(err)
+					}
+				}
 				reader.Store = disk
 			}
 			if e := reader.Check(ctx); e != nil {

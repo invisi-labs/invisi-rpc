@@ -178,13 +178,42 @@ func (r *Reader) read(ctx context.Context) (out Snapshot, err error) {
 		}
 	}
 	if out.Finalized.Block != nil && (anchor == nil || !same(anchor, out.Finalized.Block)) {
-		// Publish the rollback bound before persistence, closing the save-to-cache
-		// window without holding a publication permit while waiting for a DB writer.
-		// A failed save conservatively retains this verified native finalized bound.
-		r.protectAnchor(*out.Finalized.Block)
-		if err = r.Store.SaveFinalizedAnchor(ctx, *out.Finalized.Block); err != nil {
-			out.Finalized = Head{Status: "unavailable"}
-			return out, err
+		if store, ok := r.Store.(interface {
+			Checkpoint(context.Context) (*model.Block, error)
+			Block(context.Context, uint64) (*model.Block, error)
+			SaveFinalizedAnchorAt(context.Context, model.Block, *model.Block) error
+		}); ok {
+			// Native heads remain visible while the indexer reconciles optimistic
+			// history. Only a matching indexed block becomes a durable bound.
+			cp, e := store.Checkpoint(ctx)
+			if e != nil {
+				out.Finalized = Head{Status: "unavailable"}
+				return out, e
+			}
+			if cp != nil && out.Finalized.Block.Number <= cp.Number {
+				indexed, e := store.Block(ctx, out.Finalized.Block.Number)
+				if e != nil {
+					out.Finalized = Head{Status: "unavailable"}
+					return out, e
+				}
+				if indexed != nil && *indexed == *out.Finalized.Block {
+					e = store.SaveFinalizedAnchorAt(ctx, *out.Finalized.Block, cp)
+					if e != nil && !errors.Is(e, model.ErrFinalityChanged) {
+						out.Finalized = Head{Status: "unavailable"}
+						return out, e
+					}
+					if e == nil {
+						r.protectAnchor(*out.Finalized.Block)
+					}
+				}
+			}
+		} else {
+			// Non-indexed stores retain their existing native-anchor contract.
+			r.protectAnchor(*out.Finalized.Block)
+			if err = r.Store.SaveFinalizedAnchor(ctx, *out.Finalized.Block); err != nil {
+				out.Finalized = Head{Status: "unavailable"}
+				return out, err
+			}
 		}
 	}
 	if r.rangeFence.Load() {

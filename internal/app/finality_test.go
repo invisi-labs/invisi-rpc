@@ -46,6 +46,21 @@ func TestFinalityConflictKeepsReadOnlyServiceAcrossRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { runtime.client.Close(); runtime.store.Close() }()
+	// A durable anchor protects an indexed prefix. Finish the initial catch-up
+	// before testing a conflict in history that has actually been accepted.
+	for n := 0; n < 12; n++ {
+		progress, e := runtime.indexer.Step(ctx)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if !progress {
+			break
+		}
+	}
+	accepted, e := runtime.store.FinalizedAnchor(ctx)
+	if e != nil || accepted == nil || accepted.Number != 10 {
+		t.Fatalf("fixture did not accept indexed finality: %+v %v", accepted, e)
+	}
 	original, err := runtime.store.Checkpoint(ctx)
 	if err != nil || original == nil {
 		t.Fatal(original, err)

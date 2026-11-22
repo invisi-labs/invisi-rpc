@@ -17,6 +17,12 @@ import (
 type headerRange interface {
 	Headers(context.Context, uint64, uint64) ([]*types.Header, error)
 }
+type finalityStoreWriter interface {
+	ApplyRangeWithFinality(context.Context, []model.Batch, func(context.Context, *model.Block) (func(), error)) error
+}
+type validatedPublisher interface {
+	AcquireValidatedPublication(context.Context, model.Block, *model.Block) (func(), error)
+}
 type rangeStoreWriter interface {
 	ApplyRange(context.Context, []model.Batch, func(context.Context) (func(), error)) error
 }
@@ -202,7 +208,18 @@ func (i *Indexer) stepRange(ctx context.Context) (attempt rangeAttempt, err erro
 		return fin.AcquirePublication(guardCtx)
 	}
 
-	e = store.ApplyRange(ctx, blocks, guard)
+	if writer, ok := i.Store.(finalityStoreWriter); ok {
+		e = writer.ApplyRangeWithFinality(ctx, blocks, func(ctx context.Context, anchor *model.Block) (func(), error) {
+			if reader, ok := i.Finality.(interface {
+				AcquireValidatedRangePublication(context.Context, model.Block, *model.Block) (func(), error)
+			}); ok {
+				return reader.AcquireValidatedRangePublication(ctx, last, anchor)
+			}
+			return guard(ctx)
+		})
+	} else {
+		e = store.ApplyRange(ctx, blocks, guard)
+	}
 	if errors.Is(e, finality.ErrFinalityConflict) {
 		fenceCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
