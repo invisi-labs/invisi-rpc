@@ -468,8 +468,10 @@ func receiptJSON(value any) any {
 			if !field.IsExported() {
 				continue
 			}
-			name := field.Name
-			name = strings.ToLower(name[:1]) + name[1:]
+			name := field.Tag.Get("abi")
+			if name == "" {
+				name = strings.ToLower(field.Name[:1]) + field.Name[1:]
+			}
 			out[name] = receiptJSON(v.Field(i).Interface())
 		}
 		return out

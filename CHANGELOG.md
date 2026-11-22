@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.3
+
+- Preserve canonical ABI field names, including uint128 `grantId`, when reconstructing receipt-bound Credit settlement calldata. Valid batch draws across different owners and Credit updates can be queried without rejection.
+- Add public receipt/calldata regression fixtures for draw and update, including high uint128 IDs and mismatched-calldata rejection. Protocol version remains 1; existing indexes are retained.
+
 ## 1.3.2
 
 ### Credit identity and API compatibility
