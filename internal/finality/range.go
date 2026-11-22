@@ -41,6 +41,9 @@ func (r *Reader) ValidateAnchor(ctx context.Context, anchor model.Block) error {
 	if canonical.Block == nil {
 		return fmt.Errorf("accepted finalized anchor unavailable: %s", canonical.Status)
 	}
+	if canonical.Block.Number != anchor.Number {
+		return fmt.Errorf("%w: finalized anchor lookup returned height %d, expected %d", model.ErrFinalityChanged, canonical.Block.Number, anchor.Number)
+	}
 	if !same(&anchor, canonical.Block) || (finalized.Block.Number == anchor.Number && !same(&anchor, finalized.Block)) {
 		return ErrFinalityConflict
 	}
