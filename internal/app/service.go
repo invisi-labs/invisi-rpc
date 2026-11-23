@@ -171,7 +171,7 @@ func prepareChain(ctx context.Context, c config.Chain, reconcile bool) (runtime 
 	if err != nil {
 		return nil, err
 	}
-	api.Transactions = client
+	api.Transactions = apirpc.NewSettlementReader(client)
 	api.ChainState = client
 	api.HistoricalHeaders = indexer.NewRPCChain(client)
 	api.Finality = finalityReader

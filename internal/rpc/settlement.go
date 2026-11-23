@@ -178,11 +178,51 @@ func (a *API) GetSettlementOperations(ctx context.Context, q OperationsQuery) (*
 		return nil, errors.New("settlement snapshot reorganized")
 	}
 	out := &OperationsPage{Operations: []settlement.Operation{}, Snapshot: operationAnchor(snap), IndexedHead: operationAnchor(head), IndirectFailureDiscovery: "unsupported_without_traces"}
+	var native []canonicalBlockData
+	nativeIndex := 0
 	done := false
 	receipts := 0
 replay:
 	for blocks := 0; blocks < 16; blocks++ {
-		batch, block, e := a.canonicalBlock(ctx, r, c.Next)
+		var batch *model.Batch
+		var block *types.Block
+		if ranges, ok := r.(settlementRangeReader); ok && nativeIndex == len(native) {
+			// Fetch only the next bounded group. Dense continuations read one
+			// block, and never depend on unrelated later blocks being available.
+			last := min(c.Next+3, c.Snapshot)
+			last = min(last, c.Next+uint64(15-blocks))
+			if c.TxOffset != 0 || c.Offset != 0 {
+				last = c.Next
+			}
+			native, e = ranges.canonicalRange(ctx, a.Deployment.Protocol, c.Next, last)
+			if e != nil && !errors.Is(e, errSettlementBatchUnavailable) {
+				return nil, e
+			}
+			if errors.Is(e, errSettlementBatchUnavailable) {
+				native = nil
+			}
+			nativeIndex = 0
+		}
+		if native != nil {
+			if nativeIndex >= len(native) {
+				return nil, errors.New("incomplete native settlement range")
+			}
+			data := native[nativeIndex]
+			nativeIndex++
+			batch, e = a.Store.Batch(ctx, c.Next)
+			block = data.Block
+			if e == nil && (batch == nil || block == nil || block.NumberU64() != c.Next || block.Hash() != batch.Block.Hash || block.ParentHash() != batch.Block.ParentHash || block.Time() != batch.Block.Timestamp) {
+				e = errors.New("settlement block is not canonical")
+			}
+			if e == nil && (data.ChainID == nil || data.ChainID.String() != a.Deployment.ChainID) {
+				e = errors.New("settlement chain identity mismatch")
+			}
+			if e == nil && crypto.Keccak256Hash(data.Code) != a.Deployment.RuntimeCodeHash {
+				e = errors.New("settlement deployment code mismatch")
+			}
+		} else {
+			batch, block, e = a.canonicalBlock(ctx, r, c.Next)
+		}
 		if e != nil {
 			return nil, e
 		}

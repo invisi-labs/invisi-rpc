@@ -10,7 +10,16 @@ require (
 	modernc.org/sqlite v1.61.0
 )
 
-require github.com/invisi-labs/invisi-sdk-go/primitives v1.3.4 // indirect
+require (
+	github.com/emicklei/dot v1.6.2 // indirect
+	github.com/ferranbt/fastssz v0.1.4 // indirect
+	github.com/golang/snappy v1.0.0 // indirect
+	github.com/invisi-labs/invisi-sdk-go/primitives v1.3.4 // indirect
+	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
+	github.com/minio/sha256-simd v1.0.0 // indirect
+	github.com/mitchellh/mapstructure v1.5.0 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
+)
 
 require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
