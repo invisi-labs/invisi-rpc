@@ -92,7 +92,18 @@ func TestOnlineSettlementProfileServers(t *testing.T) {
 	}
 	var backend Backend
 	var sampleHead *model.Block
-	if file := os.Getenv("INVISI_SYNC_PROFILE_DATABASE"); file != "" {
+	if file := os.Getenv("INVISI_SYNC_PROFILE_READONLY_DATABASE"); file != "" {
+		store, err := openReadonlyProfileStore(file, dep.Deployment)
+		if err != nil {
+			t.Fatal("cannot open read-only profile database")
+		}
+		defer store.db.Close()
+		backend = store
+		sampleHead, err = store.Block(ctx, start+count-1)
+		if err != nil || sampleHead == nil {
+			t.Fatal("sample absent from read-only profile database")
+		}
+	} else if file := os.Getenv("INVISI_SYNC_PROFILE_DATABASE"); file != "" {
 		store, err := storage.OpenSQLite(ctx, file, dep.Deployment)
 		if err != nil {
 			t.Fatal("cannot open isolated profile snapshot")
