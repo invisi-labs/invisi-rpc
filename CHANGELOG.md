@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Batch native settlement replay reads in bounded groups while preserving per-block chain, runtime-code and canonical identity checks, receipt validation, paging and fresh terminal anchors. Fall back to ordinary reads when native batch transport or batch size is unsupported.
+- Verify native transaction/withdrawal body roots, preserve verified transactions when fetching uncle headers, and fetch later block groups only when the page reaches them. Public JSON-RPC methods and cursors remain unchanged.
+
 ## 1.3.4
 
 - Guard single-block and range publication against the durable finalized anchor inside the writer transaction, reject rollback across accepted finalized history, and persist conflict fences even before the first anchor. Safe and finalized Note confirmations fail closed while an anchor or fence cannot be verified.
