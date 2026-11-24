@@ -1,6 +1,6 @@
 # Invisi RPC
 
-The latest release is [v1.3.5](https://github.com/invisi-labs/invisi-rpc/releases/tag/v1.3.5), with bounded native settlement batching and unchanged public JSON-RPC/cursor contracts. See [measured catch-up results](performance.md).
+The latest release is [v1.3.6](https://github.com/invisi-labs/invisi-rpc/releases/tag/v1.3.6), with authenticated transaction sender reads, bounded native settlement batching and unchanged public JSON-RPC/cursor contracts. See [measured catch-up results](performance.md).
 
 Standalone Go service for public Invisi data: canonical events, shared Note Trees, historical membership paths. Depends only on the Go SDK protocol module, not the wallet SDK. Wallet clients retain decryption, private note storage, authorization and proving, and verify results through an independent Chain RPC.
 

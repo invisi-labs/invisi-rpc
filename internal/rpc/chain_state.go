@@ -34,13 +34,14 @@ type ChainStateRequest struct {
 }
 type ChainStateResponse struct {
 	VersionInfo
-	Deployment  model.Deployment   `json:"deployment"`
-	Header      *types.Header      `json:"header,omitempty"`
-	HeaderHash  common.Hash        `json:"headerHash,omitempty"`
-	Data        hexutil.Bytes      `json:"data"`
-	Receipt     *types.Receipt     `json:"receipt"`
-	Transaction *types.Transaction `json:"transaction,omitempty"`
-	Pending     bool               `json:"pending"`
+	Deployment      model.Deployment   `json:"deployment"`
+	Header          *types.Header      `json:"header,omitempty"`
+	HeaderHash      common.Hash        `json:"headerHash,omitempty"`
+	Data            hexutil.Bytes      `json:"data"`
+	Receipt         *types.Receipt     `json:"receipt"`
+	Transaction     *types.Transaction `json:"transaction,omitempty"`
+	TransactionFrom *common.Address    `json:"transactionFrom,omitempty"`
+	Pending         bool               `json:"pending"`
 }
 
 func chainBlock(s string) (*big.Int, error) {
@@ -175,6 +176,17 @@ func (a *API) ReadChainState(ctx context.Context, r ChainStateRequest) (ChainSta
 		}
 		if e == nil && out.Transaction != nil && out.Transaction.Hash() != r.TransactionHash {
 			return out, errors.New("upstream transaction mismatch")
+		}
+		if e == nil && out.Transaction != nil {
+			chainID, ok := new(big.Int).SetString(a.Deployment.ChainID, 10)
+			if !ok || chainID.Sign() <= 0 || (out.Transaction.Protected() && out.Transaction.ChainId().Cmp(chainID) != 0) {
+				return ChainStateResponse{}, errors.New("upstream transaction chain mismatch")
+			}
+			sender, err := types.Sender(types.LatestSignerForChainID(chainID), out.Transaction)
+			if err != nil {
+				return ChainStateResponse{}, errors.New("invalid transaction signature")
+			}
+			out.TransactionFrom = &sender
 		}
 	case "receipt":
 		if r.TransactionHash == (common.Hash{}) {

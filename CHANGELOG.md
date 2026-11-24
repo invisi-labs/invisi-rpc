@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.6
+
+- Add `transactionFrom` to transaction chain-state reads, recovered from the signed transaction after hash validation. Reject invalid signatures or protected transactions with a deployment-chain mismatch, while retaining valid unprotected legacy transactions.
+- Keep JSON-RPC methods, existing indexes, finality and reorganization handling unchanged. The sender field is a signed transaction fact and does not identify the beneficial funding owner.
+
 ## 1.3.5
 
 - Batch native settlement replay reads in bounded groups while preserving per-block chain, runtime-code and canonical identity checks, receipt validation, paging and fresh terminal anchors. Fall back to ordinary reads when native batch transport or batch size is unsupported.
