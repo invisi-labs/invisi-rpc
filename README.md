@@ -141,3 +141,24 @@ RPC imports public protocol modules and does not construct a prover or download 
 Current Credit indexing follows the committed SDK uint128 grant-ID ABI: `invisi_getCreditStatus(owner, token, decimalGrantId, atBlock)` returns canonical block metadata and status 0 (unknown), 1 (active), or 2 (permanently disabled). IDs are positive canonical decimal strings, scoped by chain, Core, owner and token; pre-revoke is supported and IDs cannot be reused. Fee-free zero-token pre-revocations are indexed and queryable without blocking checkpoint progress; grant owners remain nonzero. The retired allocation and bitmap endpoints are removed. Protocol/API version remains 1.
 
 Index and snapshot format 4 reject legacy shard/slot history. Reset or recreate development indexes and snapshots for the freshly deployed current Core; legacy IDs cannot be inferred or converted. The historical testnet deployment above is provenance for that instance, not an assertion that it supports the current Credit ABI. See [API compatibility and upgrade policy](api.md).
+
+## Peer-IP request limits
+
+The optional top-level `rateLimit` configuration is shared across RPC, Provenance and Broadcaster:
+
+```json
+{
+  "rateLimit": {
+    "requestsPerMinute": 0,
+    "exemptCIDRs": ["192.0.2.8", "2001:db8::/64"]
+  }
+}
+```
+
+The default is 0 (disabled), retaining the existing public frequency behavior. The global maxConcurrentRequests limit remains active. A positive value enables a shared per-peer-IP HTTP quota across all chains; a JSON-RPC batch counts as one HTTP request.
+
+Omitting `rateLimit` or `requestsPerMinute` keeps the service default; an explicit zero disables the configurable frequency bucket. Exemptions default to an empty list. Literal IPv4/IPv6 addresses and CIDRs are supported, including canonical IPv4-mapped addresses. Invalid entries or rates outside 0–1,000,000 are rejected. At most 256 exemption entries may be configured.
+
+Only the connection's `RemoteAddr` is used for quota identity and exemptions. `X-Forwarded-For`, `X-Real-IP`, `Forwarded` and similar client-supplied headers cannot grant an exemption. A reverse proxy is counted as the client under this default policy; true end-user IP processing requires a separately authenticated trusted-proxy layer. Keep Gateway/node networks out of the exemption list. Use firewall or NetworkPolicy rules to restrict direct access to any exempt workload network.
+
+An exemption skips frequency admission only; it does not grant administrative access or remove any concurrency, queue, request-size, timeout or business-validation bound. Restart RPC/Provenance to load changes to listener-level settings.

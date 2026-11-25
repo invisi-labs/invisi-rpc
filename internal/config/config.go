@@ -15,6 +15,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gofrs/flock"
+	"github.com/invisi-labs/invisi-rpc/internal/iplimit"
 	"github.com/invisi-labs/invisi-rpc/internal/model"
 )
 
@@ -33,9 +34,10 @@ type Chain struct {
 }
 
 type Config struct {
-	Listen                string  `json:"listen"`
-	MaxConcurrentRequests int     `json:"maxConcurrentRequests"`
-	Chains                []Chain `json:"chains"`
+	RateLimit             *iplimit.Config `json:"rateLimit,omitempty"`
+	Listen                string          `json:"listen"`
+	MaxConcurrentRequests int             `json:"maxConcurrentRequests"`
+	Chains                []Chain         `json:"chains"`
 }
 
 func File(dir string) string             { return filepath.Join(dir, "config.json") }
@@ -135,6 +137,9 @@ func (c *Chain) Validate() error {
 }
 
 func (c *Config) Validate() error {
+	if _, err := iplimit.New(c.RateLimit, 0); err != nil {
+		return err
+	}
 	if c.MaxConcurrentRequests == 0 {
 		c.MaxConcurrentRequests = 64
 	}

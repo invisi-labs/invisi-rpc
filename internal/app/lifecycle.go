@@ -194,7 +194,11 @@ func runWithInterval(ctx context.Context, cfg config.Config, dir string, interva
 		router.order = append(router.order, id)
 	}
 	initial = nil // ownership transferred to the live router
-	server := &http.Server{Addr: cfg.Listen, Handler: apirpc.LimitConcurrentRequests(router, cfg.MaxConcurrentRequests), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 35 * time.Second, WriteTimeout: 35 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10, BaseContext: func(net.Listener) context.Context { return ctx }}
+	rateHandler, err := apirpc.LimitIPRequests(router, cfg.RateLimit)
+	if err != nil {
+		return err
+	}
+	server := &http.Server{Addr: cfg.Listen, Handler: apirpc.LimitConcurrentRequests(rateHandler, cfg.MaxConcurrentRequests), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 35 * time.Second, WriteTimeout: 35 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10, BaseContext: func(net.Listener) context.Context { return ctx }}
 	errs := make(chan error, 1)
 	go func() { errs <- server.Serve(listener) }()
 	defer func() {

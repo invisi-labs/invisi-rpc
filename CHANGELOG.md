@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Add optional `rateLimit.requestsPerMinute` and direct-peer IP/CIDR exemptions with canonical IPv4/IPv6 matching and strict configuration validation. Ignore forwarded headers for quota identity and preserve existing public defaults, concurrency, queues and business checks.
+
 ## 1.3.6
 
 - Add `transactionFrom` to transaction chain-state reads, recovered from the signed transaction after hash validation. Reject invalid signatures or protected transactions with a deployment-chain mismatch, while retaining valid unprotected legacy transactions.

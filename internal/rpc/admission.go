@@ -3,7 +3,7 @@ package rpc
 import "net/http"
 
 // LimitConcurrentRequests bounds work across every chain and batch on one listener.
-// Identity-based rates and authentication belong to the deployment's HTTP gateway.
+// Peer-IP frequency admission is separate and cannot bypass these slots.
 func LimitConcurrentRequests(next http.Handler, maxConcurrent int) http.Handler {
 	slots := make(chan struct{}, maxConcurrent)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
