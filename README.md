@@ -6,7 +6,7 @@ Standalone Go service for public Invisi data: canonical events, shared Note Tree
 
 ```text
 invisi-rpc (chain authentication / indexing / pagination)
-  └── invisi-sdk-go/protocol v1.3.2
+  └── invisi-sdk-go/protocol v1.3.6
       └── settlement (canonical ABI and operation binding)
 ```
 
@@ -14,7 +14,7 @@ The service does not depend on the wallet SDK. Shared settlement fixtures are ma
 
 ## Release downloads
 
-The current release is [RPC v1.3.1](https://github.com/invisi-labs/invisi-rpc/releases/tag/v1.3.1), built with Go SDK v1.3.2. Service and SDK version numbers are independent; see [CHANGELOG.md](CHANGELOG.md) and `go.mod` for the dependencies of each revision.
+Service and SDK version numbers are independent. This development branch consumes Go SDK v1.3.6; see [CHANGELOG.md](CHANGELOG.md) and `go.mod` for the dependencies of each service revision.
 
 Pushing a stable `vX.Y.Z` tag runs tests and publishes the multi-platform GHCR image and GitHub Release binaries from the same tagged source. Manual workflow dispatch accepts an existing tag. Release notes include the complete matching section from the tagged CHANGELOG.md, followed by image digest and artifact details.
 
@@ -115,11 +115,11 @@ The project, CLI and future release artifacts use `invisi-rpc`. New installation
 
 ## GitHub namespace migration
 
-The source uses the published Go SDK v1.3.3 modules under `github.com/invisi-labs`. Container workflows target `ghcr.io/invisi-labs`.
+The source uses the published Go SDK v1.3.6 modules under `github.com/invisi-labs`. Container workflows target `ghcr.io/invisi-labs`.
 
 ## Local SDK development
 
-Release and standalone builds resolve the published Go SDK v1.3.3 modules. No sibling SDK checkout, committed module replacements or named Docker build context is required.
+Release and standalone builds resolve the published Go SDK v1.3.6 modules. No sibling SDK checkout, committed module replacements or named Docker build context is required.
 
 ```sh
 GOWORK=off go list -m -json github.com/invisi-labs/invisi-sdk-go/protocol
@@ -127,7 +127,7 @@ GOWORK=off go test ./...
 GOWORK=off go build ./...
 ```
 
-The module listing must report version `v1.3.3` without a local replacement. For SDK source development, use an optional ignored `go.work` containing the service and the SDK modules being edited. Keep machine-specific workspace paths uncommitted and use `GOWORK=off` to verify release dependencies.
+The module listing must report version `v1.3.6` without a local replacement. For SDK source development, use an optional ignored `go.work` containing the service and the SDK modules being edited. Keep machine-specific workspace paths uncommitted and use `GOWORK=off` to verify release dependencies.
 
 Container builds use the published modules:
 

@@ -5,7 +5,7 @@ go 1.26.1
 require (
 	github.com/consensys/gnark-crypto v0.19.2
 	github.com/ethereum/go-ethereum v1.17.2
-	github.com/invisi-labs/invisi-sdk-go/protocol v1.3.4
+	github.com/invisi-labs/invisi-sdk-go/protocol v1.3.6
 	github.com/jackc/pgx/v5 v5.11.0
 	modernc.org/sqlite v1.61.0
 )
@@ -14,7 +14,7 @@ require (
 	github.com/emicklei/dot v1.6.2 // indirect
 	github.com/ferranbt/fastssz v0.1.4 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
-	github.com/invisi-labs/invisi-sdk-go/primitives v1.3.4 // indirect
+	github.com/invisi-labs/invisi-sdk-go/primitives v1.3.6 // indirect
 	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
 	github.com/minio/sha256-simd v1.0.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
