@@ -20,7 +20,7 @@ func LimitIPRequests(next http.Handler, cfg *iplimit.Config) (http.Handler, erro
 	return limitIPRequests(next, cfg, time.Now)
 }
 func limitIPRequests(next http.Handler, cfg *iplimit.Config, clock func() time.Time) (http.Handler, error) {
-	policy, err := iplimit.New(cfg, 0)
+	policy, err := iplimit.New(cfg, 120)
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +35,7 @@ func limitIPRequests(next http.Handler, cfg *iplimit.Config, clock func() time.T
 			return
 		}
 		now := clock()
-		key := sha256.Sum256([]byte(iplimit.Key(r)))
+		key := sha256.Sum256([]byte(policy.Key(r)))
 		mu.Lock()
 		item, exists := clients[key]
 		if !exists && len(clients) >= 4096 {

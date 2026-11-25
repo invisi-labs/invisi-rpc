@@ -142,23 +142,26 @@ Current Credit indexing follows the committed SDK uint128 grant-ID ABI: `invisi_
 
 Index and snapshot format 4 reject legacy shard/slot history. Reset or recreate development indexes and snapshots for the freshly deployed current Core; legacy IDs cannot be inferred or converted. The historical testnet deployment above is provenance for that instance, not an assertion that it supports the current Credit ABI. See [API compatibility and upgrade policy](api.md).
 
-## Peer-IP request limits
+## Client-IP request limits
 
 The optional top-level `rateLimit` configuration is shared across RPC, Provenance and Broadcaster:
 
 ```json
 {
   "rateLimit": {
-    "requestsPerMinute": 0,
-    "exemptCIDRs": ["192.0.2.8", "2001:db8::/64"]
+    "requestsPerMinute": 120,
+    "exemptCIDRs": ["192.0.2.8", "2001:db8::/64"],
+    "trustedProxyCIDRs": ["192.0.2.10/32", "2001:db8:ffff::/64"]
   }
 }
 ```
 
-The default is 0 (disabled), retaining the existing public frequency behavior. The global maxConcurrentRequests limit remains active. A positive value enables a shared per-peer-IP HTTP quota across all chains; a JSON-RPC batch counts as one HTTP request.
+RPC enables 120 HTTP requests/minute per client IP by default across all chains; a JSON-RPC batch counts as one HTTP request. The independent global `maxConcurrentRequests` limit remains active. Upgrades from v1.3.7 that explicitly configured zero must set a positive value to enable the frequency bucket.
 
 Omitting `rateLimit` or `requestsPerMinute` keeps the service default; an explicit zero disables the configurable frequency bucket. Exemptions default to an empty list. Literal IPv4/IPv6 addresses and CIDRs are supported, including canonical IPv4-mapped addresses. Invalid entries or rates outside 0–1,000,000 are rejected. At most 256 exemption entries may be configured.
 
-Only the connection's `RemoteAddr` is used for quota identity and exemptions. `X-Forwarded-For`, `X-Real-IP`, `Forwarded` and similar client-supplied headers cannot grant an exemption. A reverse proxy is counted as the client under this default policy; true end-user IP processing requires a separately authenticated trusted-proxy layer. Keep Gateway/node networks out of the exemption list. Use firewall or NetworkPolicy rules to restrict direct access to any exempt workload network.
+`trustedProxyCIDRs` defaults to empty. Only when the actual TCP peer matches this explicit list does the quota identity use exactly one valid bare IP from `X-Real-IP`. Configure only your Nginx proxy peer addresses; Nginx must overwrite `X-Real-IP` with its restored `$remote_addr` after validating any upstream proxy. `X-Forwarded-For`, `Forwarded` and Cloudflare headers are never parsed by the application. Missing, duplicate, list-valued, zoned or invalid `X-Real-IP` falls back to a dedicated nonexempt proxy-IP bucket, separate from valid visitor identities so a visitor cannot exhaust kubelet probe quota by sharing a node address. Untrusted direct peers always use `RemoteAddr`, ignoring all forwarded headers. Each trust list supports at most 256 IP/CIDR entries; all-address proxy prefixes (`0.0.0.0/0`, `::/0`) are rejected.
+
+Exemptions use only the actual direct non-proxy TCP peer. Trusted proxies never receive exemptions, even if their address overlaps an exemption or the forwarded client matches a Pod CIDR. Keep Gateway/node addresses out of exemptions, and enforce firewall or NetworkPolicy restrictions around trusted proxies and exempt workloads. This process-local quota is not a distributed multi-replica quota.
 
 An exemption skips frequency admission only; it does not grant administrative access or remove any concurrency, queue, request-size, timeout or business-validation bound. Restart RPC/Provenance to load changes to listener-level settings.

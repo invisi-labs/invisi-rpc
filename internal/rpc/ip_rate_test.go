@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/invisi-labs/invisi-rpc/internal/iplimit"
 	"net/http"
@@ -59,8 +60,25 @@ func TestIPExemptionDoesNotBypassConcurrency(t *testing.T) {
 		t.Fatalf("exemption bypassed global limit: %d", w.Code)
 	}
 }
-func TestDefaultIPFrequencyRemainsDisabled(t *testing.T) {
-	h, err := LimitIPRequests(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) }), nil)
+func TestDefaultIPFrequencyEnabledAndExplicitZeroOptOut(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) })
+	h, err := LimitIPRequests(handler, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 121; i++ {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest("GET", "/v1", nil))
+		want := 204
+		if i == 120 {
+			want = 429
+		}
+		if w.Code != want {
+			t.Fatalf("request %d status %d want %d", i+1, w.Code, want)
+		}
+	}
+	zero := 0
+	h, err = LimitIPRequests(handler, &iplimit.Config{RequestsPerMinute: &zero})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +86,7 @@ func TestDefaultIPFrequencyRemainsDisabled(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest("GET", "/v1", nil))
 		if w.Code != 204 {
-			t.Fatal("legacy default changed")
+			t.Fatal("explicit zero did not opt out")
 		}
 	}
 	if _, err = LimitIPRequests(h, &iplimit.Config{ExemptCIDRs: []string{"invalid"}}); err == nil {
@@ -113,5 +131,62 @@ func TestIPRateWindowExpiryAndTrackingBound(t *testing.T) {
 	now = now.Add(30 * time.Second)
 	if status, _ := call("203.0.113.5:4"); status != 204 {
 		t.Fatal("fixed window did not reset", status)
+	}
+}
+
+func TestTrustedNginxSeparatesClientQuotas(t *testing.T) {
+	rate := 1
+	var cfg iplimit.Config
+	if err := json.Unmarshal([]byte(`{"trustedProxyCIDRs":["10.1.0.21/32"],"exemptCIDRs":["100.65.0.0/16"]}`), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	cfg.RequestsPerMinute = &rate
+	h, err := LimitIPRequests(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) }), &cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		peer, client string
+		want         int
+	}{
+		{"10.1.0.21:1", "203.0.113.1", 204}, {"10.1.0.21:2", "203.0.113.1", 429},
+		{"10.1.0.21:3", "203.0.113.2", 204}, {"10.1.0.22:1", "203.0.113.3", 204}, {"10.1.0.22:2", "203.0.113.4", 429},
+		{"10.1.0.21:1", "100.65.1.1", 204}, {"10.1.0.21:2", "100.65.1.1", 429},
+		{"100.65.1.1:1", "203.0.113.1", 204}, {"100.65.1.1:1", "203.0.113.1", 204},
+	} {
+		r := httptest.NewRequest("GET", "/v1", nil)
+		r.RemoteAddr = tc.peer
+		r.Header.Set("X-Real-IP", tc.client)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != tc.want {
+			t.Errorf("%s / %s = %d want %d", tc.peer, tc.client, w.Code, tc.want)
+		}
+	}
+}
+
+func TestTrustedProxyProbeBucketDoesNotShareVisitorQuota(t *testing.T) {
+	rate := 1
+	var cfg iplimit.Config
+	json.Unmarshal([]byte(`{"trustedProxyCIDRs":["10.1.0.21/32"]}`), &cfg)
+	cfg.RequestsPerMinute = &rate
+	h, err := LimitIPRequests(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) }), &cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		header string
+		want   int
+	}{{"10.1.0.21", 204}, {"10.1.0.21", 429}, {"", 204}, {"", 429}, {"203.0.113.9", 204}} {
+		r := httptest.NewRequest("GET", "/v1", nil)
+		r.RemoteAddr = "10.1.0.21:1"
+		if tc.header != "" {
+			r.Header.Set("X-Real-IP", tc.header)
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != tc.want {
+			t.Fatalf("header %q status %d want %d", tc.header, w.Code, tc.want)
+		}
 	}
 }

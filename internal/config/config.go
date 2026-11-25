@@ -137,7 +137,7 @@ func (c *Chain) Validate() error {
 }
 
 func (c *Config) Validate() error {
-	if _, err := iplimit.New(c.RateLimit, 0); err != nil {
+	if _, err := iplimit.New(c.RateLimit, 120); err != nil {
 		return err
 	}
 	if c.MaxConcurrentRequests == 0 {

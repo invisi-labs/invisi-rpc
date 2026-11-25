@@ -8,7 +8,7 @@ import (
 
 func TestIPRatePolicySurvivesConfigurationRoundTrip(t *testing.T) {
 	rate := 15
-	c := Config{RateLimit: &iplimit.Config{RequestsPerMinute: &rate, ExemptCIDRs: []string{"100.65.0.0/16", "2001:db8::1"}}}
+	c := Config{RateLimit: &iplimit.Config{RequestsPerMinute: &rate, TrustedProxyCIDRs: []string{"10.1.0.21/32"}, ExemptCIDRs: []string{"100.65.0.0/16", "2001:db8::1"}}}
 	dir := t.TempDir()
 	if err := Save(dir, c); err != nil {
 		t.Fatal(err)

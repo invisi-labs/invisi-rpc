@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 1.3.8
+
+- Resolve client quotas through an explicit `rateLimit.trustedProxyCIDRs` allowlist and one Nginx-overwritten `X-Real-IP`; ignore all forwarded headers from other peers. Keep malformed proxy metadata in its own limited peer bucket and never derive Pod exemptions from forwarded identities. Retain concurrency, queues, body bounds, timeouts and business/proof validation.
+- Enable the default RPC client-IP quota at 120 HTTP requests/minute across chains; explicit zero remains an operator opt-out.
+
 ## 1.3.7
 
 - Upgrade all consumed Go SDK modules to v1.3.6 and refresh verified module checksums. Keep service/API versions, contract deployments and stored data unchanged.

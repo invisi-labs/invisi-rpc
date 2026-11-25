@@ -23,6 +23,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	gethrpc "github.com/ethereum/go-ethereum/rpc"
 	"github.com/invisi-labs/invisi-rpc/internal/config"
+	"github.com/invisi-labs/invisi-rpc/internal/iplimit"
 	"github.com/invisi-labs/invisi-rpc/internal/model"
 	apirpc "github.com/invisi-labs/invisi-rpc/internal/rpc"
 	"github.com/invisi-labs/invisi-rpc/internal/storage"
@@ -399,7 +400,7 @@ func waitChainStatus(t *testing.T, listen, chainID string, minHead uint64, done 
 		default:
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("chain %s did not reach checkpoint %d", chainID, minHead)
+			t.Fatalf("chain %s did not reach checkpoint %d: %v", chainID, minHead, err)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -420,7 +421,10 @@ func twoChainService(t *testing.T) (config.Config, *chainRPCFixture, *chainRPCFi
 	b := &chainRPCFixture{chainID: 31338, protocol: second.Deployment.Protocol}
 	_, first.ChainRPC = fixtureChain(t, a)
 	_, second.ChainRPC = fixtureChain(t, b)
-	return config.Config{Listen: unusedListenAddress(t), Chains: []config.Chain{second, first}}, a, b
+	// Lifecycle fixtures deliberately poll every 10ms; use an explicit positive
+	// test quota so they exercise reload/indexing rather than exhaust the public default.
+	testRate := 10000
+	return config.Config{Listen: unusedListenAddress(t), RateLimit: &iplimit.Config{RequestsPerMinute: &testRate}, Chains: []config.Chain{second, first}}, a, b
 }
 func TestRunMultipleChainsRoutesCheckpointsSnapshotsAndRestart(t *testing.T) {
 	cfg, a, _ := twoChainService(t)
