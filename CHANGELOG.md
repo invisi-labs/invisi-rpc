@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.3.7
+
 - Upgrade all consumed Go SDK modules to v1.3.6 and refresh verified module checksums. Keep service/API versions, contract deployments and stored data unchanged.
 
 - Add optional `rateLimit.requestsPerMinute` and direct-peer IP/CIDR exemptions with canonical IPv4/IPv6 matching and strict configuration validation. Ignore forwarded headers for quota identity and preserve existing public defaults, concurrency, queues and business checks.
